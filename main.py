@@ -121,6 +121,7 @@ def save_checkpoint(ckpt_dir, state):
     torch.save(saved_state, ckpt_dir)
     
 def sample():
+    plt.clf()
     testloader = DataLoader(test_data, batch_size=BATCH_SIZE, shuffle=True, drop_last=True)
     sample_img, label = next(iter(testloader))
     pred = model(sample_img)
