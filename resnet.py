@@ -129,11 +129,12 @@ def sample():
     plt.clf()
     testloader = DataLoader(test_data, batch_size=BATCH_SIZE, shuffle=True, drop_last=True)
     sample_img, label = next(iter(testloader))
+    sample_img = sample_img.to(device)
     pred = model(sample_img)
     for i in range(0, 6):
         plt.subplot(2, 3, i + 1)
         plt.tight_layout()
-        plt.imshow(sample_img[i][0], cmap='gray', interpolation='none')
+        plt.imshow(sample_img.cpu()[i][0], cmap='gray', interpolation='none')
         plt.title(torch.argmax(pred[i]))
         plt.xticks([])
         plt.yticks([])
