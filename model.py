@@ -1,5 +1,5 @@
 import torch.nn as nn
-import torchq
+import torch
 class PaperModel(nn.Module):
 
     def __init__(self):
