@@ -1,250 +1,142 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Wed Jun 28 19:08:04 2023
-
-@author: nick8
-"""
 import os
-import numpy as np
-import matplotlib.pyplot as plt
-import torch.optim as optim
 import torch
+
+import model
+from numpy import random
+
+import numpy as np
+import torch.nn as nn
+from torch.utils.data import DataLoader
 from torchvision import datasets
 from torchvision import transforms
-from torch.utils.data import DataLoader
-import time
-from model import PaperModel
+from sklearn.metrics import accuracy_score
 
-torch.autograd.set_detect_anomaly(True)
-from torch.utils.data import DataLoader, Dataset
-from numpy import random
-from torch.optim import Adam
-from torch import nn
-from pathlib import Path
-from torchvision.models import resnet50, ResNet50_Weights
-import torch.nn.functional as F
+from torch.utils.tensorboard import SummaryWriter
 
-
-# set random seed for reproducibility
-
-def seed_init_fn(x):
-    # seed = args.seed + x
-    seed = x
-    np.random.seed(seed)
-    random.seed(seed)
-    torch.manual_seed(seed)
-    return
-
-
-seed_init_fn(0)
-
-"""Set hyper-parameters"""
+DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 IMG_SIZE = 28
 BATCH_SIZE = 32
-num_train_steps = 5000
-snapshot_freq_for_preemption = 2000
-eval_freq = 1000
-snapshot_freq = 5000
-sample_freq = 2000
-
-device = "cuda" if torch.cuda.is_available() else "cpu"
-checkpoint_dir = os.path.join(os.getcwd(), "checkpoint", "base")
-checkpoint_meta_dir = os.path.join(
-    os.getcwd(), "checkpoint-meta", "base", "checkpoint.pth")
-sample_dir = os.path.join(os.getcwd(), "samples_dir", "base")
-
-"""Instantiate dataloaders of training and test datasets"""
-transform = [transforms.Resize(IMG_SIZE),
-             transforms.CenterCrop(IMG_SIZE), transforms.ToTensor()]
-transform = transforms.Compose(transform)
-training_data = datasets.MNIST(
-    root=".", train=True, download=True, transform=transform)
-test_data = datasets.MNIST(
-    root=".", train=False, download=True, transform=transform)
-
-trainloader = DataLoader(training_data, batch_size=BATCH_SIZE, shuffle=True, drop_last=True)
-testloader = DataLoader(test_data, batch_size=BATCH_SIZE, shuffle=True, drop_last=True)
-
-"""Define the loss function"""
+SAVE_DIR = 'runs'
+EPOCH = 100
+LR = 0.001
 
 
-def get_loss():
-    def loss_fn(model, batch, labels):
-        pred = model(batch)
-        # print(pred.shape,batch.shape, labels.shape)
-        # print(pred, labels)
-        return F.nll_loss(pred, labels)
+def seed_init_fn(x):
+   #seed = args.seed + x
+   seed = x
+   np.random.seed(seed)
+   random.seed(seed)
+   torch.manual_seed(seed)
+   return
 
-    return loss_fn
-
-
-"""Optimizer that depends on steps not epochs"""
-
-
-def optimization_manager():
-    def optimize_fn(optimizer, params, step, lr=2e-4,
-                    warmup=5000,
-                    grad_clip=1):
-        """Optimizes with warmup and gradient clipping (disabled if negative)."""
-        if warmup > 0:
-            for g in optimizer.param_groups:
-                g['lr'] = lr * np.minimum(step / warmup, 1.0)
-        if grad_clip >= 0:
-            torch.nn.utils.clip_grad_norm_(params, max_norm=grad_clip)
-        optimizer.step()
-
-    return optimize_fn
+def save_model(model, save_path):
+    torch.save(model.state_dict(), save_path)
 
 
-"""Functions for saving and restoring checkpoints"""
+def evaluate(model, data_loader):
+    ''' set model to evaluate mode '''
+    model.eval()
+    preds = []
+    gts = []
+    with torch.no_grad():  # do not need to caculate information for gradient during eval
+        for idx, (imgs, gt) in enumerate(data_loader):
+            imgs = imgs.to(DEVICE)
+            pred = model(imgs)
+
+            _, pred = torch.max(pred, dim=1)
+
+            pred = pred.cpu().numpy().squeeze()
+            gt = gt.numpy().squeeze()
+
+            preds.append(pred)
+            gts.append(gt)
+
+    gts = np.concatenate(gts)
+    preds = np.concatenate(preds)
+
+    return accuracy_score(gts, preds)
+
+if __name__ == '__main__':
 
 
-def restore_checkpoint(ckpt_dir, state, device):
-    """Taken from https://github.com/yang-song/score_sde_pytorch"""
-    if not os.path.exists(ckpt_dir):
-        Path(os.path.dirname(ckpt_dir)).mkdir(parents=True, exist_ok=True)
-        print(f"No checkpoint found at {ckpt_dir}. "
-              f"Returned the same state as input")
-        return state
-    else:
-        loaded_state = torch.load(ckpt_dir, map_location=device)
-        state['optimizer'].load_state_dict(loaded_state['optimizer'])
-        state['model'].load_state_dict(loaded_state['model'], strict=False)
-        state['step'] = loaded_state['step']
-        return state
+    '''create directory to save trained model and other info'''
+    if not os.path.exists(SAVE_DIR):
+        os.makedirs(SAVE_DIR)
 
+    ''' setup DEVICE'''
 
-def save_checkpoint(ckpt_dir, state):
-    """Taken from https://github.com/yang-song/score_sde_pytorch"""
+    ''' setup random seed '''
+    seed_init_fn(0)
 
-    saved_state = {
-        'optimizer': state['optimizer'].state_dict(),
-        'model': state['model'].state_dict(),
-        'step': state['step']
-    }
-    torch.save(saved_state, ckpt_dir)
+    ''' load dataset and prepare data loader '''
+    print('===> prepare dataloader ...')
+    """Instantiate dataloaders of training and test datasets"""
+    transform = [transforms.Resize(IMG_SIZE),
+                 transforms.CenterCrop(IMG_SIZE), transforms.ToTensor()]
+    transform = transforms.Compose(transform)
+    training_data = datasets.MNIST(
+        root=".", train=True, download=True, transform=transform)
+    test_data = datasets.MNIST(
+        root=".", train=False, download=True, transform=transform)
 
+    train_loader = DataLoader(training_data, batch_size=BATCH_SIZE, shuffle=True, drop_last=True)
+    val_loader = DataLoader(test_data, batch_size=BATCH_SIZE, shuffle=True, drop_last=True)
 
-def sample():
-    plt.clf()
-    testloader = DataLoader(test_data, batch_size=BATCH_SIZE, shuffle=True, drop_last=True)
-    sample_img, label = next(iter(testloader))
-    sample_img = sample_img.to(device)
-    pred = model(sample_img)
-    for i in range(0, 6):
-        plt.subplot(2, 3, i + 1)
-        plt.tight_layout()
-        plt.imshow(sample_img.cpu()[i][0], cmap='gray', interpolation='none')
-        plt.title(torch.argmax(pred[i]))
-        plt.xticks([])
-        plt.yticks([])
+    ''' load model '''
+    print('===> prepare model ...')
+    model = model.PaperModel()
+    model.to(DEVICE)  # load model to gpu
 
+    ''' define loss '''
+    criterion = nn.CrossEntropyLoss()
 
-"""Wrapper for one training/test step"""
+    ''' setup optimizer '''
+    optimizer = torch.optim.SGD(model.parameters(), lr=LR, momentum=0.9)
 
+    ''' setup tensorboard '''
+    writer = SummaryWriter(os.path.join(SAVE_DIR, 'train_info'))
 
-def get_step_fn(train, optimize_fn=optimization_manager(),
-                device=None):
-    """A wrapper for loss functions in training or evaluation
-    Based on code from https://github.com/yang-song/score_sde_pytorch"""
-    if device == None:
-        device = "cpu"
+    ''' train model '''
+    print('===> start training ...')
+    iters = 0
+    best_acc = 0
+    for epoch in range(1, EPOCH + 1):
 
-    loss_fn = get_loss()
+        model.train()
 
-    def step_fn(state, batch, labels):
-        """Running one step of training or evaluation.
-        Returns:
-                loss: The average loss value of this state.
-        """
-        model = state['model']
-        if train:
-            optimizer = state['optimizer']
-            optimizer.zero_grad()
-            loss = loss_fn(model, batch, labels)
-            loss.backward()
-            optimize_fn(optimizer, model.parameters(), step=state['step'])
-            state['step'] += 1
+        for idx, (imgs, cls) in enumerate(train_loader):
+            train_info = 'Epoch: [{0}][{1}/{2}]'.format(epoch, idx + 1, len(train_loader))
+            iters += 1
 
-        else:
-            with torch.no_grad():
-                loss = loss_fn(model, batch, labels)
+            ''' move data to gpu '''
+            imgs, cls = imgs.to(DEVICE), cls.to(DEVICE)
 
-        return loss
+            ''' forward path '''
+            output = model(imgs)
 
-    return step_fn
+            ''' compute loss, backpropagation, update parameters '''
+            loss = criterion(output, cls)  # compute loss
 
+            optimizer.zero_grad()  # set grad of all parameters to zero
+            loss.backward()  # compute gradient for each parameters
+            optimizer.step()  # update parameters
 
-model = PaperModel()
+            ''' write out information to tensorboard '''
+            writer.add_scalar('loss', loss.data.cpu().numpy(), iters)
+            train_info += ' loss: {:.4f}'.format(loss.data.cpu().numpy())
 
-model.to(device)
+            print(train_info)
 
-optimizer = Adam(model.parameters(), lr=0.001)
+        if epoch % 1 == 0:
+            ''' evaluate the model '''
+            acc = evaluate(model, val_loader)
+            writer.add_scalar('val_acc', acc, iters)
+            print('Epoch: [{}] ACC:{}'.format(epoch, acc))
 
-"""Initialise model state"""
+            ''' save best model '''
+            if acc > best_acc:
+                save_model(model, os.path.join(SAVE_DIR, 'model_best.pth.tar'))
+                best_acc = acc
 
-state = dict(optimizer=optimizer, model=model, step=0)
-state = restore_checkpoint(checkpoint_meta_dir, state, device)
-optimize_fn = optimization_manager()
-train_step_fn = get_step_fn(train=True, optimize_fn=optimize_fn)
-eval_step_fn = get_step_fn(train=False, optimize_fn=optimize_fn)
-
-initial_step = int(state['step'])
-train_iter = iter(trainloader)
-eval_iter = iter(testloader)
-
-train = True
-
-if (train == True):
-
-    for step in range(initial_step, num_train_steps + 1):
-        # Train step
-        try:
-            batch, labels = next(train_iter)
-            batch = batch.to(device).float()
-            labels = labels.to(device)
-        except StopIteration:  # Start new epoch if run out of data
-            train_iter = iter(trainloader)
-            batch, labels = next(train_iter)
-            batch = batch.to(device).float()
-            labels = labels.to(device)
-        loss = train_step_fn(state, batch, labels)
-
-        # writer.add_scalar("training_loss", loss.item(), step)
-
-        # Save a temporary checkpoint to resume training if training is stopped
-        if step != 0 and step % snapshot_freq_for_preemption == 0:
-            print("Saving temporary checkpoint")
-            save_checkpoint(checkpoint_meta_dir, state)
-
-        # Report the loss on an evaluation dataset periodically
-        if step % eval_freq == 0:
-            print("Starting evaluation")
-            # Use 25 batches for test-set evaluation, arbitrary choice
-            N_evals = 25
-            for i in range(N_evals):
-                try:
-                    eval_batch, labels = next(eval_iter)
-                    eval_batch = batch.to(device).float()
-                    labels = labels.to(device)
-                except StopIteration:  # Start new epoch
-                    eval_iter = iter(testloader)
-                    eval_batch, labels = next(eval_iter)
-                    eval_batch = batch.to(device).float()
-                    labels = labels.to(device)
-                eval_loss = eval_step_fn(state, eval_batch, labels)
-                eval_loss = eval_loss.detach()
-            print("step: %d, eval_loss: %.5e" % (step, eval_loss.item()))
-
-        # Save a checkpoint periodically
-        if step != 0 and step % snapshot_freq == 0 or step == num_train_steps:
-            print("Saving a checkpoint")
-            # Save the checkpoint.
-            save_step = step // snapshot_freq
-            save_checkpoint(os.path.join(
-                checkpoint_dir, 'checkpoint_{}.pth'.format(save_step)), state)
-
-        if step != 0 and step % sample_freq == 0 or step == num_train_steps:
-            sample()
-
-sample()
+        ''' save model '''
+        save_model(model, os.path.join(SAVE_DIR, 'model_{}.pth.tar'.format(epoch)))
