@@ -17,7 +17,7 @@ DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 IMG_SIZE = 28
 BATCH_SIZE = 32
 SAVE_DIR = 'runs'
-EPOCH = 100
+EPOCH = 200
 LR = 0.001
 
 
