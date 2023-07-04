@@ -84,7 +84,7 @@ def get_model(name = "ResNet"):
         
     if name == "MLP":
         
-        model = nn.Sequential(nn.Linear(28*28,300),nn.Linear(300, 10))
+        model = nn.Sequential(nn.Flatten(),nn.Linear(28*28,300),nn.Linear(300, 10))
     
     
     return model
