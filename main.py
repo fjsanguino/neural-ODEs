@@ -37,12 +37,12 @@ seed_init_fn(0)
 """Set hyper-parameters"""
 IMG_SIZE = 28
 BATCH_SIZE = 32
-num_train_steps = 5000
+num_train_steps = 500000
 snapshot_freq_for_preemption = 2000
 eval_freq = 1000
 snapshot_freq = 5000
 sample_freq = 2000
-model_name = "ResNet"
+model_name = "MLP"
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
 
@@ -90,12 +90,13 @@ def sample(sample_dir = sample_dir, step = None):
         step = str(0)
     testloader = DataLoader(test_data, batch_size=BATCH_SIZE, shuffle=False, drop_last=True)
     sample_img, label = next(iter(testloader))
+    sample_img = sample_img.to(device)
     pred = model(sample_img)
     for i in range(0,6):
         
         plt.subplot(2,3,i+1)
         plt.tight_layout()
-        plt.imshow(sample_img[i][0], cmap='gray', interpolation='none')
+        plt.imshow(sample_img.cpu()[i][0], cmap='gray', interpolation='none')
         plt.title(torch.argmax(pred[i]))
         plt.xticks([])
         plt.yticks([])
@@ -162,7 +163,7 @@ eval_iter = iter(testloader)
 
 
 """Training Loop"""
-train = False
+train = True
 
 if (train == True):
 
