@@ -4,8 +4,6 @@ import math
 import numpy as np
 from scipy.integrate import odeint, solve_ivp
 
-
-
 class Residual(nn.Module):
     def __init__(self, input_dim, output_dim, stride=1, downsample=None):
         super(Residual, self).__init__()
@@ -31,21 +29,19 @@ class Residual(nn.Module):
 class NonResidual(nn.Module):
     ''' This will be our f.
         Same as Javiers Residual, but without being residual - that's done by the ode solver'''
-    def __init__(self, input_dim, output_dim, stride=1, downsample=None):
+    def __init__(self, input_dim, output_dim, stride=1):
         super(NonResidual, self).__init__()
         self.norm1 = nn.GroupNorm(min(32, input_dim), input_dim)
         self.relu = nn.ReLU(inplace=True)
-        self.downsample = downsample
         self.conv1 = nn.Conv2d(input_dim, output_dim, kernel_size=3, stride=stride, padding=1, bias=False)
         self.norm2 = nn.GroupNorm(min(32, output_dim), output_dim)
         self.conv2 = nn.Conv2d(output_dim, output_dim, kernel_size=3, padding=1, bias=False)
 
     def forward(self, x, t=None):
+
         if len(x.shape) == 1:
             x = torch.reshape(x, [1, x.shape[0]])
         output = self.relu(self.norm1(x))
-        if self.downsample is not None:
-            output = self.downsample(output)
         output = self.conv1(output)
         output = self.norm2(output)
         output = self.relu(output)
@@ -66,7 +62,7 @@ class ODENetCore(autograd.Function):
         # Todo: Need to define this externally
         # if not hasattr(ctx, "f"):
         #     self.f = NonResidual(input_dim=in_features + 1, output_dim=out_features)
-        output = odeint(f, input.cpu().detach(), t=np.arange(6) )
+        output = odeint(f, input.cpu(), t=torch.arange(6) )
 
         ctx.f = f
         ctx.shape_params = shape_params # # list of shapes of all parameters of f
@@ -101,27 +97,37 @@ class ODENetCore(autograd.Function):
 
 
 class ODENetManual(nn.Module):
-    def __init__(self):
+    def __init__(self, device):
         super(ODENetManual, self).__init__()
+        self.device = device
         self.conv1 = nn.Conv2d(1, 64, 3, 1)
         self.residual1 = Residual(64, 64, 2, nn.Conv2d(64, 64, kernel_size=1, stride=2, bias=False))
         self.residual2 = Residual(64, 64, 2, nn.Conv2d(64, 64, kernel_size=1, stride=2, bias=False))
 
-        self.core = ODENetCore()
+        self.core = ODENetCore(input_dim=[])
 
         self.norm1 = nn.GroupNorm(min(32, 64), 64)
         self.relu = nn.ReLU(inplace=True)
         self.pool = nn.AdaptiveAvgPool2d((1,1))
         self.fc = nn.Linear(64, 10)
 
-        self.f = NonResidual(input_dim=64, output_dim=64) # ignoring t because the paper's code does that , too
+        self.f_torch = NonResidual(input_dim=64, output_dim=64) # ignoring t because the paper's code does that , too
 
+    def f_numpy(self, x, t, shape=[64,7,7], batch_dim=1):
+        '''Takes numpy arrays as input and gives np arrays as output'''
+        x = torch.Tensor(x).to(self.device)
+        t = torch.scalar_tensor(t).to(self.device)
+        x = torch.reshape(x, [batch_dim, *shape])
+        with torch.no_grad():
+            result = self.f_torch(x, t)
+        return result.detach().cpu().numpy().reshape(-1)
     def forward(self, x):
 
         out = self.residual2(self.residual1(self.conv1(x)))
+        shape = out.shape
         out = torch.reshape(out, [-1]) # [out.shape[0], -1]) # TODO: What to do with the batchsize? Set batchsize = 1? Can we vectorize the ODE-solving o        out = self.core.apply(out, self.f, [p.shape for p in self.f.parameters()])
-        out = self.core.apply(out, self.f, [p.shape for p in self.f.parameters()])
-        out = torch.reshape(out, [1, -1])
+        out = self.core.apply(out, self.f_numpy, [p.shape for p in self.f_torch.parameters()])
+        out = torch.reshape(out, *shape)
         out = self.relu(self.norm1(out))
         out = self.pool(out)
         out = self.fc(torch.flatten(out, 1))

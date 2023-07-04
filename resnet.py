@@ -89,7 +89,7 @@ if __name__ == '__main__':
     if MODEL == "resnet":
         model = model.PaperModel()
     elif MODEL == "odenet_manual":
-        model = model_odenet_manual.ODENetManual()
+        model = model_odenet_manual.ODENetManual(device=DEVICE)
     else:
         raise ValueError(f"Model not supported: {MODEL}")
     model.to(DEVICE)  # load model to gpu
