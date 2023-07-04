@@ -53,10 +53,6 @@ checkpoint_meta_dir = os.path.join(
         os.getcwd(), "checkpoint-meta",model_name, "checkpoint.pth")
 sample_dir = os.path.join(os.getcwd(), "samples_dir", model_name)
 
-if not os.path.exists(checkpoint_dir):
-    os.makedirs(checkpoint_dir)
-if not os.path.exists(checkpoint_meta_dir):
-    os.makedirs(checkpoint_meta_dir)
 if not os.path.exists(sample_dir):
     os.makedirs(sample_dir)
 
