@@ -140,3 +140,5 @@ if __name__ == '__main__':
 
         ''' save model '''
         save_model(model, os.path.join(SAVE_DIR, 'model_{}.pth.tar'.format(epoch)))
+
+    print('Best acc is {}'.format(best_acc))
