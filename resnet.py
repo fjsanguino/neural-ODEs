@@ -1,7 +1,7 @@
 import os
 import torch
 
-import model
+import model, model_odenet_manual
 from numpy import random
 
 import numpy as np
@@ -19,8 +19,10 @@ BATCH_SIZE = 32
 SAVE_DIR = 'runs'
 EPOCH = 200
 LR = 0.001
-
-
+# MODEL = "resnet" # "resnet", "odenet_manual"
+MODEL = "odenet_manual" # "resnet", "odenet_manual"
+if MODEL == "odenet_manual":
+    BATCH_SIZE = 1
 def seed_init_fn(x):
    #seed = args.seed + x
    seed = x
@@ -84,7 +86,12 @@ if __name__ == '__main__':
 
     ''' load model '''
     print('===> prepare model ...')
-    model = model.PaperModel()
+    if MODEL == "resnet":
+        model = model.PaperModel()
+    elif MODEL == "odenet_manual":
+        model = model_odenet_manual.ODENetManual()
+    else:
+        raise ValueError(f"Model not supported: {MODEL}")
     model.to(DEVICE)  # load model to gpu
 
     ''' define loss '''
