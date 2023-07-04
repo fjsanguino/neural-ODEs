@@ -21,8 +21,7 @@ from torch import nn
 from pathlib import Path
 from torchvision.models import resnet50, ResNet50_Weights
 import torch.nn.functional as F
-
-
+from utils import get_model, restore_checkpoint, save_checkpoint, count_params,save_png, optimization_manager
 
 #set random seed for reproducibility
 
@@ -43,15 +42,23 @@ snapshot_freq_for_preemption = 2000
 eval_freq = 1000
 snapshot_freq = 5000
 sample_freq = 2000
-
-
+model_name = "ResNet"
 device = "cuda" if torch.cuda.is_available() else "cpu"
-checkpoint_dir = os.path.join(os.getcwd(), "checkpoint","base")
+
+
+
+"""Create/set checpoint and sample directories"""
+checkpoint_dir = os.path.join(os.getcwd(), "checkpoint",model_name)
 checkpoint_meta_dir = os.path.join(
-        os.getcwd(), "checkpoint-meta","base", "checkpoint.pth")
-sample_dir = os.path.join(os.getcwd(), "samples_dir", "base")
+        os.getcwd(), "checkpoint-meta",model_name, "checkpoint.pth")
+sample_dir = os.path.join(os.getcwd(), "samples_dir", model_name)
 
-
+if not os.path.exists(checkpoint_dir):
+    os.makedirs(checkpoint_dir)
+if not os.path.exists(checkpoint_meta_dir):
+    os.makedirs(checkpoint_meta_dir)
+if not os.path.exists(sample_dir):
+    os.makedirs(sample_dir)
 
 
 """Instantiate dataloaders of training and test datasets"""
@@ -73,56 +80,19 @@ def get_loss():
     
     def loss_fn(model,batch, labels):
         pred  = model(batch)
-        #print(pred.shape,batch.shape, labels.shape)
-        #print(pred, labels)
         return F.nll_loss(pred, labels)
     
     return loss_fn
 
-"""Optimizer that depends on steps not epochs"""
-def optimization_manager():
-   
-    def optimize_fn(optimizer, params, step, lr= 2e-4,
-                    warmup=5000,
-                    grad_clip=1):
-        """Optimizes with warmup and gradient clipping (disabled if negative)."""
-        if warmup > 0:
-            for g in optimizer.param_groups:
-                g['lr'] = lr * np.minimum(step / warmup, 1.0)
-        if grad_clip >= 0:
-            torch.nn.utils.clip_grad_norm_(params, max_norm=grad_clip)
-        optimizer.step()
-    return optimize_fn
+
     
 
-"""Functions for saving and restoring checkpoints"""
-def restore_checkpoint(ckpt_dir, state, device):
-    """Taken from https://github.com/yang-song/score_sde_pytorch"""
-    if not os.path.exists(ckpt_dir):
-        Path(os.path.dirname(ckpt_dir)).mkdir(parents=True, exist_ok=True)
-        print(f"No checkpoint found at {ckpt_dir}. "
-                        f"Returned the same state as input")
-        return state
-    else:
-        loaded_state = torch.load(ckpt_dir, map_location=device)
-        state['optimizer'].load_state_dict(loaded_state['optimizer'])
-        state['model'].load_state_dict(loaded_state['model'], strict=False)
-        state['step'] = loaded_state['step']
-        return state
 
-def save_checkpoint(ckpt_dir, state):
-    """Taken from https://github.com/yang-song/score_sde_pytorch"""
-
-    saved_state = {
-            'optimizer': state['optimizer'].state_dict(),
-            'model': state['model'].state_dict(),
-            'step': state['step']
-        }
-    torch.save(saved_state, ckpt_dir)
-    
-def sample():
-    plt.clf()
-    testloader = DataLoader(test_data, batch_size=BATCH_SIZE, shuffle=True, drop_last=True)
+"""Generate  a sample image and save it"""   
+def sample(sample_dir = sample_dir, step = None):
+    if step is None:
+        step = str(0)
+    testloader = DataLoader(test_data, batch_size=BATCH_SIZE, shuffle=False, drop_last=True)
     sample_img, label = next(iter(testloader))
     pred = model(sample_img)
     for i in range(0,6):
@@ -133,6 +103,7 @@ def sample():
         plt.title(torch.argmax(pred[i]))
         plt.xticks([])
         plt.yticks([])
+    plt.savefig(os.path.join(sample_dir,"sample_step_"+step))
     
 """Wrapper for one training/test step"""
 def get_step_fn(train,optimize_fn=optimization_manager(),
@@ -169,13 +140,12 @@ def get_step_fn(train,optimize_fn=optimization_manager(),
     return step_fn
 
 
-model = resnet50()
-model.conv1 = torch.nn.Conv2d(1,64, kernel_size=(7,7), stride = (2,2), padding = (3,3), bias = False)
-
-model = nn.Sequential(model, nn.Linear(1000,10), nn.LogSoftmax(1))
-
-
+"""Get model,  input is string with model name"""
+model = get_model(model_name)
 model.to(device)
+
+
+print("Total params:",  count_params(model)) 
 
 optimizer = Adam(model.parameters(), lr=0.001)
 
@@ -189,11 +159,13 @@ optimize_fn = optimization_manager()
 train_step_fn = get_step_fn(train=True,optimize_fn=optimize_fn)
 eval_step_fn = get_step_fn(train=False,optimize_fn=optimize_fn)
 
-
+"""Initialise training iterables"""
 initial_step = int(state['step'])
 train_iter = iter(trainloader)
 eval_iter = iter(testloader)
 
+
+"""Training Loop"""
 train = False
 
 if (train == True):
@@ -246,10 +218,10 @@ if (train == True):
                 checkpoint_dir, 'checkpoint_{}.pth'.format(save_step)), state)
         
         if step != 0 and step%sample_freq == 0 or step == num_train_steps:
-            sample()
+            sample(step = str(step))
 
 
 
 
     
-sample()
+sample(step = str(int(state['step'])))
