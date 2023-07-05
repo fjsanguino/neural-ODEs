@@ -130,7 +130,7 @@ if __name__ == '__main__':
         if epoch % 1 == 0:
             ''' evaluate the model '''
             acc = evaluate(model, val_loader)
-            writer.add_scalar('val_acc', acc, iters)
+            writer.add_scalar('val_acc', acc, epoch)
             print('Epoch: [{}] ACC:{}'.format(epoch, acc))
 
             ''' save best model '''
