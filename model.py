@@ -1,5 +1,8 @@
 import torch.nn as nn
 import torch
+
+from scipy.integrate import ode
+
 class PaperModel(nn.Module):
 
     def __init__(self):
@@ -8,7 +11,8 @@ class PaperModel(nn.Module):
         self.residual1 = Residual(64, 64, 2, nn.Conv2d(64, 64, kernel_size=1, stride=2, bias=False))
         self.residual2 = Residual(64, 64, 2, nn.Conv2d(64, 64, kernel_size=1, stride=2, bias=False))
 
-        self.core = nn.Sequential(*[Residual(64, 64) for _ in range(6)])
+        #self.core = nn.Sequential(*[Residual(64, 64) for _ in range(6)])
+        self.odefunc = Residual(64, 64)
 
         self.norm1 = nn.GroupNorm(min(32, 64), 64)
         self.relu = nn.ReLU(inplace=True)
@@ -17,12 +21,25 @@ class PaperModel(nn.Module):
 
     def forward(self, x):
         out = self.residual2(self.residual1(self.conv1(x)))
-        out = self.core(out)
+
+        #out = self.core(out)
+        out = self.ODEsolve(out, self.odefunc, 0, 6)
+        
         out = self.relu(self.norm1(out))
         out = self.pool(out)
         out = self.fc(torch.flatten(out, 1))
 
         return out
+
+    def ODEsolve(self, inp, func, start, end):
+        y0, t0 = inp, start
+        
+        r = ode(func).set_integrator('vode', method='adams')
+        r.set_initial_value(inp, start)
+        
+        return r.integrate(end)
+
+    
 class Residual(nn.Module):
     expansion = 1
 
@@ -36,8 +53,6 @@ class Residual(nn.Module):
         self.conv2 = nn.Conv2d(output_dim, output_dim, kernel_size=3, padding=1, bias=False)
 
     def forward(self, x):
-
-
         output = self.relu(self.norm1(x))
 
         if self.downsample is not None:

@@ -56,6 +56,22 @@ def evaluate(model, data_loader):
 
     return accuracy_score(gts, preds)
 
+def revmodeback(out, start, end, loss_grad, model):
+   s0 = [out, loss_grad, torch.zeros(64)]
+
+   # a(t) = dL/dz(t) is already given by loss_grad
+   dfdz = torch.autograd.grad(model.odefunc(z), z)
+   dfdtheta = torch.autograd.grad(model.odefunc(model.parameters()), model.parameters())
+   
+   
+   def aug_dynamics([z, a, _], t, params):
+      return [model.odefunc(z), -a.transpose() * dfdz, -a.transpose() * dfdtheta]
+
+   z, dLdx, dLdtheta = model.ODESolve(s0, aug_dynamics, end, start)
+
+   return dLdx, dLdtheta
+   
+ 
 if __name__ == '__main__':
 
 
@@ -117,9 +133,14 @@ if __name__ == '__main__':
             ''' compute loss, backpropagation, update parameters '''
             loss = criterion(output, cls)  # compute loss
 
-            optimizer.zero_grad()  # set grad of all parameters to zero
-            loss.backward()  # compute gradient for each parameters
-            optimizer.step()  # update parameters
+            #optimizer.zero_grad()  # set grad of all parameters to zero
+            #loss.backward()  # compute gradient for each parameters
+            #optimizer.step()  # update parameters
+
+            loss_grad = torch.autograd.grad(criterion(output, cls), output)
+            grads = revmodeback(output, 0, 6, loss_grad, model)
+            model.grad = grads
+            optimizer.step()  # Update parameters
 
             ''' write out information to tensorboard '''
             writer.add_scalar('loss', loss.data.cpu().numpy(), iters)

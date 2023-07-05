@@ -17,7 +17,7 @@ def grad_odeint_all(yt, func, y0, t, func_args , **kwargs):
     flat_args , unflatten = flatten(func_args)
     def flat_func(y, t, flat_args) :
         return func (y, t, *unflatten(flat_args))
-    def unpack ( x ) :
+    def unpack (x):
         #        y,     vjp_y,     vjp_t,    vjp_args
         return x[0:D],  [D:2 * D], x[2 * D], x[2 * D + 1:]
 def augmented_dynamics (augmented_state, t, flat_args):
@@ -25,7 +25,7 @@ def augmented_dynamics (augmented_state, t, flat_args):
     y , vjp_y , _ , _ = unpack (augmented_state)
     vjp_all, dy_dt = make_vjp (flat_func, argunum=(0, 1, 2))(y, t, flat_args)
     vjp_y, vjp_t, vjp_args = vjp_all(−vjp_y)
-    return np.hstak((dy_dt, vjp_y, vjp_t, vjp_args))
+    return np.hstack((dy_dt, vjp_y, vjp_t, vjp_args))
     
 def vjp_all (g, **kwargs):
     vjp_y = g[−1, :]
