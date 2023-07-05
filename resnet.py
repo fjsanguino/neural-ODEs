@@ -8,7 +8,7 @@ Created on Wed Jul  5 21:36:31 2023
 import os
 import torch
 
-import model
+
 from model import get_model
 from numpy import random
 import matplotlib.pyplot as plt
