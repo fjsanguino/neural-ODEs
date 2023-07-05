@@ -27,7 +27,7 @@ IMG_SIZE = 28
 BATCH_SIZE = 32
 SAVE_DIR = os.path.join('runs',MODEL_NAME)
 EPOCH = 200
-LR = 0.001
+LR = 0.0001
 SAMPLE_RATE = 5
 
 def seed_init_fn(x):
@@ -158,8 +158,8 @@ if __name__ == '__main__':
             train_info += ' loss: {:.4f}'.format(loss.data.cpu().numpy())
 
             print(train_info)
-        if epoch % SAMPLE_RATE == 0:
-            sample(epoch = epoch, model = model, testloader = val_loader)
+        #if epoch % SAMPLE_RATE == 0:
+            #sample(epoch = epoch, model = model, testloader = val_loader)
 
            
         if epoch % 1 == 0:
