@@ -26,7 +26,7 @@ BATCH_SIZE = 32
 SAVE_DIR = os.path.join('runs','MLP')
 EPOCH = 200
 LR = 0.001
-sample_rate = 1
+SAMPLE_RATE = 1
 
 def seed_init_fn(x):
    #seed = args.seed + x
@@ -156,7 +156,7 @@ if __name__ == '__main__':
             train_info += ' loss: {:.4f}'.format(loss.data.cpu().numpy())
 
             print(train_info)
-        if epoch % sample_rate == 0:
+        if epoch % SAMPLE_RATE == 0:
             sample(epoch = epoch, model = model, testloader = val_loader)
 
            
