@@ -32,7 +32,7 @@ def seed_init_fn(x):
 def save_model(model, save_path):
     torch.save(model.state_dict(), save_path)
 
-def sample(epoch = None, save_dir = SAVE_DIR ,testloader, model):
+def sample(model, testloader, epoch = None, save_dir = SAVE_DIR):
    if epoch is None:
       epoch = 0
    sample_img, label = next(iter(testloader))
