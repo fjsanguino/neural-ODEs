@@ -1,9 +1,16 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Wed Jul  5 21:36:31 2023
+
+@author: nick8
+"""
+
 import os
 import torch
 
 import model
 from numpy import random
-
+import matplotlib.pyplot as plt
 import numpy as np
 import torch.nn as nn
 from torch.utils.data import DataLoader
@@ -19,7 +26,7 @@ BATCH_SIZE = 32
 SAVE_DIR = os.path.join('runs','MLP')
 EPOCH = 200
 LR = 0.001
-sample_rate = 5
+sample_rate = 1
 
 def seed_init_fn(x):
    #seed = args.seed + x
@@ -37,6 +44,11 @@ def sample(model, testloader, epoch = None, save_dir = SAVE_DIR):
       epoch = 0
    sample_img, label = next(iter(testloader))
    pred = model(sample_img)
+   sample_dir = os.path.join(save_dir,"samples")
+   
+   if not os.path.exists(sample_dir):
+       os.makedirs(sample_dir)
+   
    for i in range(0,6):
         
        plt.subplot(2,3,i+1)
@@ -45,7 +57,7 @@ def sample(model, testloader, epoch = None, save_dir = SAVE_DIR):
        plt.title(torch.argmax(pred[i]))
        plt.xticks([])
        plt.yticks([])
-   plt.savefig(os.path.join(save_dir,"samples","sample_epoch_"+str(epoch)))
+   plt.savefig(os.path.join(sample_dir,"sample_epoch_"+str(epoch)))
    
 
 
@@ -100,7 +112,7 @@ if __name__ == '__main__':
 
     ''' load model '''
     print('===> prepare model ...')
-    model = model.PaperModel()
+    model = model.MLP(28*28,10)
     model.to(DEVICE)  # load model to gpu
 
     ''' define loss '''
@@ -116,6 +128,8 @@ if __name__ == '__main__':
     print('===> start training ...')
     iters = 0
     best_acc = 0
+    
+    
     for epoch in range(1, EPOCH + 1):
 
         model.train()
