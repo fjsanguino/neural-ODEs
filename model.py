@@ -73,7 +73,7 @@ def get_model(name, input_dim = 28*28, output_dim = 10):
 
 
     else:
-        print('No model with specified name, exiting code...')
+        print('No model with specified name \"' ,name , '\" exiting code...')
         sys.exit()
 
 
