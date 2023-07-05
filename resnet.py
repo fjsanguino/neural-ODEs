@@ -36,16 +36,16 @@ def sample(model, testloader, epoch = None, save_dir = SAVE_DIR):
    if epoch is None:
       epoch = 0
    sample_img, label = next(iter(testloader))
-    pred = model(sample_img)
-    for i in range(0,6):
+   pred = model(sample_img)
+   for i in range(0,6):
         
-        plt.subplot(2,3,i+1)
-        plt.tight_layout()
-        plt.imshow(sample_img[i][0], cmap='gray', interpolation='none')
-        plt.title(torch.argmax(pred[i]))
-        plt.xticks([])
-        plt.yticks([])
-    plt.savefig(os.path.join(save_dir,"samples","sample_epoch_"+str(epoch)))
+       plt.subplot(2,3,i+1)
+       plt.tight_layout()
+       plt.imshow(sample_img[i][0], cmap='gray', interpolation='none')
+       plt.title(torch.argmax(pred[i]))
+       plt.xticks([])
+       plt.yticks([])
+   plt.savefig(os.path.join(save_dir,"samples","sample_epoch_"+str(epoch)))
    
 
 
