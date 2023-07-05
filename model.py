@@ -67,9 +67,9 @@ class MLP(nn.Module):
 def get_model(name, input_dim = 28*28, output_dim = 10):
     if name == 'MLP':
         return MLP(input_dim,output_dim)
-    else if name == 'ResNet':
+    elif name == 'ResNet':
         return Residual()
-    else if name == 'Paper':
+    elif name == 'Paper':
         return PaperModel()
 
 
