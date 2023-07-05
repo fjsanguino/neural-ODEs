@@ -16,10 +16,10 @@ from torch.utils.tensorboard import SummaryWriter
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 IMG_SIZE = 28
 BATCH_SIZE = 32
-SAVE_DIR = 'runs'
+SAVE_DIR = 'runs' os.path.join('runs','MLP')
 EPOCH = 200
 LR = 0.001
-
+sample_rate = 5
 
 def seed_init_fn(x):
    #seed = args.seed + x
@@ -31,6 +31,22 @@ def seed_init_fn(x):
 
 def save_model(model, save_path):
     torch.save(model.state_dict(), save_path)
+
+def sample(epoch = None, save_dir = SAVE_DIR ,testloader, model):
+   if epoch is None:
+      epoch = 0
+   sample_img, label = next(iter(testloader))
+    pred = model(sample_img)
+    for i in range(0,6):
+        
+        plt.subplot(2,3,i+1)
+        plt.tight_layout()
+        plt.imshow(sample_img[i][0], cmap='gray', interpolation='none')
+        plt.title(torch.argmax(pred[i]))
+        plt.xticks([])
+        plt.yticks([])
+    plt.savefig(os.path.join(save_dir,"samples","sample_epoch_"+str(epoch)))
+   
 
 
 def evaluate(model, data_loader):
@@ -126,7 +142,10 @@ if __name__ == '__main__':
             train_info += ' loss: {:.4f}'.format(loss.data.cpu().numpy())
 
             print(train_info)
+        if epoch % sample_rate == 0:
+            sample(epoch = epoch, model = model, testloader = val_loader)
 
+           
         if epoch % 1 == 0:
             ''' evaluate the model '''
             acc = evaluate(model, val_loader)
