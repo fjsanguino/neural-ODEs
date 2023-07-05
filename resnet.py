@@ -9,6 +9,7 @@ import os
 import torch
 
 import model
+from model import get_model
 from numpy import random
 import matplotlib.pyplot as plt
 import numpy as np
