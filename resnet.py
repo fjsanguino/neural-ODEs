@@ -16,7 +16,7 @@ from torch.utils.tensorboard import SummaryWriter
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 IMG_SIZE = 28
 BATCH_SIZE = 32
-SAVE_DIR = 'runs' os.path.join('runs','MLP')
+SAVE_DIR = os.path.join('runs','MLP')
 EPOCH = 200
 LR = 0.001
 sample_rate = 5
