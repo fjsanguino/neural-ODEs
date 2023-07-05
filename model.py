@@ -1,5 +1,6 @@
 import torch.nn as nn
 import torch
+import sys
 class PaperModel(nn.Module):
 
     def __init__(self):
@@ -49,3 +50,32 @@ class Residual(nn.Module):
         output = self.conv2(output)
 
         return output + x
+
+class MLP(nn.Module):
+    def __init__(self,input_dim,output_dim):
+        super(MLP, self).__init__()
+        self.flatten = nn.Flatten()
+        self.linear1 = nn.Linear(input_dim,300)
+        self.linear2 = nn.Linear(300,output_dim)
+
+    def forward(self,x):
+        out = self.flatten(x)
+        out = self.linear1(out)
+        out = self.linear2(out)
+
+        return out
+
+def get_model(name, input_dim = 28*28, output_dim = 10):
+    if name == 'MLP':
+        return MLP(input_dim,output_dim)
+    elif name == 'Paper':
+        return PaperModel()
+
+
+    else:
+        print('No model with specified name \"' ,name , '\" exiting code...')
+        sys.exit()
+
+
+
+    
