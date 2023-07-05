@@ -63,4 +63,18 @@ class MLP(nn.Module):
         out = self.linear2(out)
 
         return out
+
+def get_model(name, input_dim = 28*28, output_dim = 10):
+    if name == 'MLP':
+        return MLP(input_dim,output_dim)
+    else if name == 'ResNet':
+        return Residual()
+
+
+
+    else:
+        print('No model with specified name')
+
+
+
     
