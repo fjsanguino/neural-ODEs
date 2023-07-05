@@ -69,7 +69,8 @@ def get_model(name, input_dim = 28*28, output_dim = 10):
         return MLP(input_dim,output_dim)
     else if name == 'ResNet':
         return Residual()
-
+    else if name == 'Paper':
+        return PaperModel()
 
 
     else:
