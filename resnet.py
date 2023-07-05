@@ -26,6 +26,7 @@ LR = 0.001
 MODEL = "odenet_manual" # "resnet", "odenet_manual"
 if MODEL == "odenet_manual":
     BATCH_SIZE = 1
+DEBUG = True # reduce accuracy of ODENet to speed up training
 def seed_init_fn(x):
    #seed = args.seed + x
    seed = x
@@ -92,7 +93,11 @@ if __name__ == '__main__':
     if MODEL == "resnet":
         model = model.PaperModel()
     elif MODEL == "odenet_manual":
-        model = model_odenet_manual.ODENetManual(device=DEVICE)
+        if DEBUG:
+            rtol, atol = 1e-4, 1e-6
+        else:
+            rtol, atol = 1e-7, 1e-9
+        model = model_odenet_manual.ODENetManual(device=DEVICE, rtol=rtol, atol=atol)
     else:
         raise ValueError(f"Model not supported: {MODEL}")
     model.to(DEVICE)  # load model to gpu
