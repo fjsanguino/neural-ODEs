@@ -49,3 +49,18 @@ class Residual(nn.Module):
         output = self.conv2(output)
 
         return output + x
+
+class MLP(nn.Module):
+    def __init__(self,input_dim,output_dim):
+        super(MLP, self).__init__()
+        self.flatten = nn.Flatten()
+        self.linear1 = nn.Linear(input_dim,300)
+        self.linear2 = nn.Linear(300,output_dim)
+
+    def forward(self,x):
+        out = self.flatten(x)
+        out = self.linear1(x)
+        out = self.linear2(x)
+
+        return out
+    
