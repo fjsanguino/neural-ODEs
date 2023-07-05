@@ -20,13 +20,14 @@ from sklearn.metrics import accuracy_score
 
 from torch.utils.tensorboard import SummaryWriter
 
+MODEL_NAME = 'MLP'
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 IMG_SIZE = 28
 BATCH_SIZE = 32
-SAVE_DIR = os.path.join('runs','MLP')
+SAVE_DIR = os.path.join('runs',MODEL_NAME)
 EPOCH = 200
 LR = 0.001
-SAMPLE_RATE = 1
+SAMPLE_RATE = 5
 
 def seed_init_fn(x):
    #seed = args.seed + x
@@ -112,7 +113,7 @@ if __name__ == '__main__':
 
     ''' load model '''
     print('===> prepare model ...')
-    model = model.MLP(28*28,10)
+    model = get_model(MODEL_NAME)
     model.to(DEVICE)  # load model to gpu
 
     ''' define loss '''
