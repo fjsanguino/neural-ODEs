@@ -59,8 +59,8 @@ class MLP(nn.Module):
 
     def forward(self,x):
         out = self.flatten(x)
-        out = self.linear1(x)
-        out = self.linear2(x)
+        out = self.linear1(out)
+        out = self.linear2(out)
 
         return out
     
