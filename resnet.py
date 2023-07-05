@@ -13,6 +13,9 @@ from sklearn.metrics import accuracy_score
 
 from torch.utils.tensorboard import SummaryWriter
 
+import logging
+logging.basicConfig(format='%(asctime)s:%(levelname)s:%(message)s', level=logging.DEBUG)
+
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 IMG_SIZE = 28
 BATCH_SIZE = 32
@@ -71,7 +74,7 @@ if __name__ == '__main__':
     seed_init_fn(0)
 
     ''' load dataset and prepare data loader '''
-    print('===> prepare dataloader ...')
+    logging.log(logging.INFO, '===> prepare dataloader ...')
     """Instantiate dataloaders of training and test datasets"""
     transform = [transforms.Resize(IMG_SIZE),
                  transforms.CenterCrop(IMG_SIZE), transforms.ToTensor()]
@@ -85,7 +88,7 @@ if __name__ == '__main__':
     val_loader = DataLoader(test_data, batch_size=BATCH_SIZE, shuffle=True, drop_last=True)
 
     ''' load model '''
-    print('===> prepare model ...')
+    logging.log(logging.INFO, '===> prepare model ...')
     if MODEL == "resnet":
         model = model.PaperModel()
     elif MODEL == "odenet_manual":
@@ -104,7 +107,7 @@ if __name__ == '__main__':
     writer = SummaryWriter(os.path.join(SAVE_DIR, 'train_info'))
 
     ''' train model '''
-    print('===> start training ...')
+    logging.log(logging.INFO, '===> start training ...')
     iters = 0
     best_acc = 0
     for epoch in range(1, EPOCH + 1):
@@ -133,6 +136,7 @@ if __name__ == '__main__':
             train_info += ' loss: {:.4f}'.format(loss.data.cpu().numpy())
 
             print(train_info)
+            logging.log(logging.DEBUG, train_info)
 
         if epoch % 1 == 0:
             ''' evaluate the model '''
