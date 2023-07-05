@@ -1,5 +1,6 @@
 import torch.nn as nn
 import torch
+import sys
 class PaperModel(nn.Module):
 
     def __init__(self):
@@ -74,7 +75,8 @@ def get_model(name, input_dim = 28*28, output_dim = 10):
 
 
     else:
-        print('No model with specified name')
+        print('No model with specified name, exiting code...')
+        sys.exit()
 
 
 
