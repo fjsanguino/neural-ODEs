@@ -39,7 +39,7 @@ def test_odenet_core():
     f = NonResidualNumpyCompat(input_dim=2, output_dim=2, shape=[2,], conv=False)
     core = ODENetCore()
 
-    optimizer = torch.optim.SGD(f.parameters(), lr=0.01, momentum=0.9)
+    optimizer = torch.optim.SGD(f.parameters(), lr=0.001, momentum=0.9)
     train_data = TensorDataset(torch.tensor(Z0), torch.tensor(Y))
     eval_data = TensorDataset(torch.tensor(Z0_eval), torch.tensor(Y_eval))
 
