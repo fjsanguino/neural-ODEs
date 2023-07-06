@@ -27,7 +27,7 @@ IMG_SIZE = 28
 BATCH_SIZE = 32
 SAVE_DIR = os.path.join('runs',MODEL_NAME)
 EPOCH = 200
-LR = 0.001
+LR = 0.005
 SAMPLE_RATE = 5
 
 def seed_init_fn(x):
