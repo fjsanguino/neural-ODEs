@@ -187,7 +187,7 @@ class ODENetCore(autograd.Function):
                     elem = elem.reshape(shp)
                 sol_elems.append(-elem) # by trial and error, this has to be negative for the loss to decrease.
         # TODO: It is unclear whether the first element, sol_elems[1], has to be negative as well.
-        return sol_elems[1], None, None, None, None, *sol_elems[2:],   # Grad df/dtheta is solution[2]
+        return sol_elems[1], None, None, None, None, None, *sol_elems[2:],   # Grad df/dtheta is solution[2]
 
 
 class ODENetManual(nn.Module):
