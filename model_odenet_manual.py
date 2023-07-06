@@ -31,6 +31,24 @@ class Residual(nn.Module):
 
         return output + x
 
+class NonResidualFC(nn.Module):
+
+    def __init__(self, input_dim, output_dim):
+        super(NonResidualFC, self).__init__()
+        self.relu = nn.ReLU(inplace=True)
+        self.fc1 = nn.Linear(input_dim * 2, 64)
+        self.fc2 = nn.Linear(64, 64)
+        self.fc3 = nn.Linear(64, output_dim)
+
+    def forward(self, t, x):
+        t_ = torch.ones(x.shape, dtype=torch.float32, device=x.device) * t
+        out = self.fc1(torch.cat([x, t_], dim=1))
+        out = self.relu(out)
+        out = self.fc2(out)
+        out = self.relu(out)
+        out = self.fc3(out)
+        return out
+
 
 class NonResidual(nn.Module):
     ''' This will be our f.
@@ -42,6 +60,7 @@ class NonResidual(nn.Module):
         self.conv1 = nn.Conv2d(input_dim+1, output_dim, kernel_size=3, stride=stride, padding=1, bias=False)
         self.norm2 = nn.GroupNorm(min(32, output_dim), output_dim)
         self.conv2 = nn.Conv2d(output_dim, output_dim, kernel_size=3, padding=1, bias=False)
+        self.norm3 = nn.GroupNorm(min(32, output_dim), output_dim) # paper has another norm in the end
 
     def forward(self, t, x):
         shape = x.shape[-2:]
@@ -54,24 +73,30 @@ class NonResidual(nn.Module):
         output = self.norm2(output)
         output = self.relu(output)
         output = self.conv2(output)
-
+        output = self.norm3(output) # added
         return output
 
 class NonResidualNumpyCompat(nn.Module):
-    def __init__(self, input_dim, output_dim, stride=1, device=None):
+    def __init__(self, input_dim, output_dim, stride=1, device=None, conv=True, shape=[64,7,7]):
         super(NonResidualNumpyCompat, self).__init__()
-        self.non_res_block = NonResidual(input_dim, output_dim, stride)
+        assert input_dim == output_dim
+        if conv:
+            self.non_res_block = NonResidual(input_dim, output_dim, stride)
+        else:
+            self.non_res_block = NonResidualFC(input_dim, output_dim)
+
+        self.shape = shape
         self.device = device
         self.n_eval = 0 # for debugging. Edit: Not needed; the points used by the solver are also returned.
 
-    def parameters(self, *args, **kwargs):
-        return self.non_res_block.parameters(*args, **kwargs)
+   # def parameters(self, *args, **kwargs):
+   #     return self.non_res_block.parameters(*args, **kwargs)
 
-    def forward(self, t, x, shape=[64,7,7], batch_dim=1):
+    def forward(self, t, x, batch_dim=1):
         '''Takes numpy arrays as input and gives np arrays as output'''
         x = torch.Tensor(x).to(self.device)
         t = torch.scalar_tensor(t).to(self.device)
-        x = torch.reshape(x, [batch_dim, *shape])
+        x = torch.reshape(x, [batch_dim, *self.shape])
         with torch.no_grad():
             result = self.non_res_block(t, x)
         return result.detach().cpu().numpy().reshape(-1)
@@ -92,17 +117,17 @@ class ODENetCore(autograd.Function):
         # t = torch.arange(6)
         t = [0, 5]
         # output = odeint(f, input.cpu(), t=t, rtol=rtol, atol=atol, tfirst=True) # todo: atol, hmax, hmin: what they mean, and then use them to reduce the required accuracy
-        output = solve_ivp(f, t_span=t, y0=input.cpu(), method="LSODA", rtol=rtol, atol=atol, vectorized=True, min_step=0, ) # todo: atol, hmax, hmin: what they mean, and then use them to reduce the required accuracy
+        with torch.no_grad():
+            output = solve_ivp(f, t_span=t, y0=input.cpu().numpy(), method="LSODA", rtol=rtol, atol=atol, vectorized=True, min_step=0, ) # todo: atol, hmax, hmin: what they mean, and then use them to reduce the required accuracy
         ctx.f = f
         ctx.shape_params = shape_params # # list of shapes of all parameters of f
-        ctx.output = output
         ctx.t = t
         ctx.rtol = rtol
         ctx.atol = atol
-        import pdb
-        pdb.set_trace()
         assert output.success, output.message + f"{output}"
-        return output.y[:, -1]
+        output =  torch.tensor(output.y[:, -1], dtype=torch.float32, device=input.device, requires_grad=True)
+        ctx.output = output
+        return output
 
     @staticmethod
     def backward(ctx, grad_output):
@@ -111,26 +136,55 @@ class ODENetCore(autograd.Function):
         with respect to the output, and we need to compute the gradient of the loss
         with respect to the input.
         """
-        import pdb
-        pdb.set_trace()
         with torch.no_grad():
             output = ctx.output
             t = ctx.t
-        s0 = [output[-1], grad_output, *[torch.zeros(*ps) for ps in ctx.shape_params]]
-        def augmented_dynamics(cur_state, t):
-            z_t = cur_state[0]
-            a_t = cur_state[1]
-            z = z_t.detach()
-            z.requires_grad_(True)
-            grad_f = torch.autograd.grad(ctx.f(z_t), [z, *ctx.f.parameters()] , allow_unused=True, retain_graph=True ) #  retain_graph=True : They use that in their implementation, but not sure what it does. allow_unused=True: If we need that, we should get an error when setting it to False. Can try with False.
-            df_dz = grad_f[0]
-            df_dtheta = grad_f[1:]
-            return [ctx.f(z_t, t), -torch.einsum("i,i->", a_t, df_dz),
-                    *[-torch.einsum("i,i->", a_t, df_dth_) for df_dth_ in df_dtheta] ]
+            s0 = [output.detach().numpy(), grad_output.detach().numpy(), *[np.zeros(ps) for ps in ctx.shape_params]]
+            s0_shapes = [s.shape for s in s0]
+            s0_sizes = [np.prod(s) for s in s0_shapes]
+            s0 = [el.flatten() for el in s0]
+            s0 = np.concatenate(s0)
+            def augmented_dynamics(t, cur_state, device):
+                z_t = cur_state[:s0_sizes[0]]
+                a_t = cur_state[ s0_sizes[0] : s0_sizes[0]+s0_sizes[1] ]
+                z_t = torch.tensor(z_t, dtype=torch.float32, device=device)
+                a_t = torch.tensor(a_t, dtype=torch.float32, device=device)
+                t = torch.scalar_tensor(t, requires_grad=False, dtype=torch.float32, device=device)
+                if len(s0_shapes[0])>1:
+                    z_t = z_t.reshape(s0_shapes[0])
+                if len(s0_shapes[1])>1:
+                    a_t = a_t.reshape(s0_shapes[1])
+                with torch.enable_grad():
+                    z = z_t.detach()[None, ...]
+                    z.requires_grad_(True)  # todo autograd fails; I think it can be solved by calling torch.no_grad() in the right place. Check existing code for where that would be.
+                    grad_f = []
+                    f_applied = ctx.f.non_res_block(t, z)
+                    for f_val in f_applied.flatten():
+                        grad_f.append(torch.autograd.grad(f_val, [z, *ctx.f.parameters()] , allow_unused=True,
+                                                          retain_graph=True )) #  retain_graph=True : They use that in their implementation, but not sure what it does. allow_unused=True: If we need that, we should get an error when setting it to False. Can try with False.
+                df_dz = torch.stack([grad_f[i][0].flatten() for i in range(len(grad_f))], dim=0) # each row is for one element of f.
+                # TODO: There is more than one dimension in grad_f[i]. Aha, it's a tuple of tensors. each can have any length.
+                df_dtheta = []
+                for j in range(1,len(grad_f[0])):
+                    df_dtheta.append(torch.stack([grad_f[i][j].flatten() for i in range(len(grad_f))], dim=0) )# each row is for one element of f.
+                # df_dtheta = grad_f[1:]
+                return np.concatenate([ctx.f(t, z_t).flatten(), # unnecessary additional function call?
+                                       -torch.einsum("i,ij->j", a_t, df_dz).detach().numpy().flatten(),
+                        *[-torch.einsum("i,ij->j", a_t, df_dth_).detach().numpy().flatten() for df_dth_ in df_dtheta] ])
 
-        solution = solve_ivp(augmented_dynamics, t, s0)
-
-        return solution[1], None, None, None, None, solution[2]  # Grad df/dtheta is solution[2]
+            solution = solve_ivp(lambda t, s: augmented_dynamics(t, s, output.device), t, s0)
+            solution = solution.y[:, -1]
+            sol_elems = []
+            start_idx = 0
+            for i, (shp, sz) in enumerate(zip(s0_shapes, s0_sizes)):
+                elem = solution[start_idx : start_idx + sz]
+                start_idx = start_idx + sz
+                elem = torch.tensor(elem, dtype=torch.float32, device=output.device, requires_grad=False)
+                if len(shp) > 1:
+                    elem = elem.reshape(shp)
+                sol_elems.append(-elem) # by trial and error, this has to be negative for the loss to decrease.
+        # TODO: It is unclear whether the first element, sol_elems[1], has to be negative as well.
+        return sol_elems[1], None, None, None, None, *sol_elems[2:],   # Grad df/dtheta is solution[2]
 
 
 class ODENetManual(nn.Module):
@@ -169,8 +223,8 @@ class ODENetManual(nn.Module):
         # pdb.set_trace()
         out_ = self.core.apply(out, self.f_numpy, [p.shape for p in self.f_numpy.parameters()], self.rtol, self.atol, *self.f_numpy.parameters())  #input, f, shape_params, rtol=1e-7, atol=1e-9
         #out = out_.y[:, -1] #np.reshape(out.y, [6, -1]) # there are six timesteps, I think this returns all of them
-        out = torch.tensor(out, device=device, requires_grad=True, dtype=torch.float32)
-        out = torch.reshape(out, shape)
+        #out = torch.tensor(out_, device=device, requires_grad=True, dtype=torch.float32)
+        out = torch.reshape(out_, shape)
         out = self.relu(self.norm1(out))
         out = self.pool(out)
         out = self.fc(torch.flatten(out, 1))
