@@ -139,7 +139,7 @@ class ODENetCore(autograd.Function):
         with torch.no_grad():
             output = ctx.output
             t = ctx.t
-            s0 = [output.detach().numpy(), grad_output.detach().numpy(), *[np.zeros(ps) for ps in ctx.shape_params]]
+            s0 = [output.detach().cpu().numpy(), grad_output.detach().cpu().numpy(), *[np.zeros(ps) for ps in ctx.shape_params]]
             s0_shapes = [s.shape for s in s0]
             s0_sizes = [np.prod(s) for s in s0_shapes]
             s0 = [el.flatten() for el in s0]
