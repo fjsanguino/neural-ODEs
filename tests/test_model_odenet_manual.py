@@ -32,13 +32,14 @@ def test_odenet_core():
     Z0, Y = ode.random_data(K=1000, T=1.)
     Z0_eval, Y_eval = ode.random_data(K=200, T=1.)
     epochs = 100
-    rtol= 1e-5
-    atol=1e-7
+    rtol= 1e-7
+    atol=1e-9
+    batch_size = 8
 
     f = NonResidualNumpyCompat(input_dim=2, output_dim=2, shape=[2,], conv=False)
     core = ODENetCore()
 
-    optimizer = torch.optim.SGD(f.parameters(), lr=0.001, momentum=0.9)
+    optimizer = torch.optim.SGD(f.parameters(), lr=0.01, momentum=0.9)
     train_data = TensorDataset(torch.tensor(Z0), torch.tensor(Y))
     eval_data = TensorDataset(torch.tensor(Z0_eval), torch.tensor(Y_eval))
 
@@ -47,18 +48,23 @@ def test_odenet_core():
     for epoch in range(epochs):
         l_ct = 0
         l_sum = 0
+        optimizer.zero_grad()
+        loss = 0
         for idx, (x, y) in enumerate(train_loader):
-            optimizer.zero_grad()
             pred = core.apply(x.flatten(), f, [p.shape for p in f.parameters()], rtol, atol, *f.parameters())
-            loss = torch.mean(torch.abs(pred - y))
-            dbg = loss.backward()
-            l_sum += loss.cpu()
+            loss += torch.mean(torch.abs(pred - y))
             l_ct += 1
-            for param in f.parameters():
-                g = param.grad
-                print(g)
-            print(f"Loss: {l_sum/l_ct}")
-            optimizer.step()
+            if l_ct >= batch_size:
+                (loss / l_ct).backward()
+                optimizer.step()
+                for param in f.parameters():
+                    g = param.grad
+                    print(g)
+                print(f"Loss: {loss.cpu() / l_ct}")
+                optimizer.zero_grad()
+                loss = 0.
+                l_ct = 0
+        print(f"Ep {epoch}: Loss: {l_sum/l_ct}")
 
 
 
