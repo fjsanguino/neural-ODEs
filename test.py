@@ -9,7 +9,7 @@ from model import get_model
 from torch.utils.data import DataLoader
 
 
-MODEL_NAME = 'Paper'
+MODEL_NAME = 'MLP'
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 IMG_SIZE = 28
 BATCH_SIZE = 32
