@@ -51,7 +51,7 @@ def test_odenet_core():
         optimizer.zero_grad()
         loss = 0
         for idx, (x, y) in enumerate(train_loader):
-            pred = core.apply(x.flatten(), f, [p.shape for p in f.parameters()], rtol, atol, *f.parameters())
+            pred = core.apply(x.flatten(), f, [p.shape for p in f.parameters()], x.shape , rtol, atol, *f.parameters())
             loss += torch.mean(torch.abs(pred - y))
             l_ct += 1
             if l_ct >= batch_size:

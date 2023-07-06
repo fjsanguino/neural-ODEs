@@ -104,8 +104,8 @@ class NonResidualNumpyCompat(nn.Module):
 class ODENetCore(autograd.Function):
 
     @staticmethod
-    def forward(ctx, input, f, shape_params, rtol=1e-7, atol=1e-9, *f_parameters):
-        """s
+    def forward(ctx, input, f, shape_params, input_shape, rtol=1e-7, atol=1e-9, *f_parameters):
+        """
         In the forward pass we receive a Tensor containing the input and return
         a Tensor containing the output. ctx is a context object that can be used
         to stash information for backward computation. You can cache arbitrary
@@ -124,6 +124,7 @@ class ODENetCore(autograd.Function):
         ctx.t = t
         ctx.rtol = rtol
         ctx.atol = atol
+        ctx.input_shape = input_shape
         assert output.success, output.message + f"{output}"
         output =  torch.tensor(output.y[:, -1], dtype=torch.float32, device=input.device, requires_grad=True)
         ctx.output = output
@@ -156,9 +157,11 @@ class ODENetCore(autograd.Function):
                     a_t = a_t.reshape(s0_shapes[1])
                 with torch.enable_grad():
                     z = z_t.detach()[None, ...]
-                    z.requires_grad_(True)  # todo autograd fails; I think it can be solved by calling torch.no_grad() in the right place. Check existing code for where that would be.
+                    z.requires_grad_(True)
                     grad_f = []
-                    f_applied = ctx.f.non_res_block(t, z)
+                    f_applied = ctx.f.non_res_block(t, torch.reshape(z, ctx.input_shape)) # ctx.f.non_res_block(t, z)
+                    # TODO: Use f.non_res_block and reshape z correctly before inputting it here.
+                    # TODO: Cannot use f, because we need tensors for autograd and f expects numpy arrays.
                     for f_val in f_applied.flatten():
                         grad_f.append(torch.autograd.grad(f_val, [z, *ctx.f.parameters()] , allow_unused=True,
                                                           retain_graph=True )) #  retain_graph=True : They use that in their implementation, but not sure what it does. allow_unused=True: If we need that, we should get an error when setting it to False. Can try with False.
@@ -169,8 +172,8 @@ class ODENetCore(autograd.Function):
                     df_dtheta.append(torch.stack([grad_f[i][j].flatten() for i in range(len(grad_f))], dim=0) )# each row is for one element of f.
                 # df_dtheta = grad_f[1:]
                 return np.concatenate([ctx.f(t, z_t).flatten(), # unnecessary additional function call?
-                                       -torch.einsum("i,ij->j", a_t, df_dz).detach().numpy().flatten(),
-                        *[-torch.einsum("i,ij->j", a_t, df_dth_).detach().numpy().flatten() for df_dth_ in df_dtheta] ])
+                                       -torch.einsum("i,ij->j", a_t, df_dz).detach().cpu().numpy().flatten(),
+                        *[-torch.einsum("i,ij->j", a_t, df_dth_).detach().cpu().numpy().flatten() for df_dth_ in df_dtheta] ])
 
             solution = solve_ivp(lambda t, s: augmented_dynamics(t, s, output.device), t, s0)
             solution = solution.y[:, -1]
@@ -221,7 +224,7 @@ class ODENetManual(nn.Module):
         out = torch.reshape(out, [-1]) # [out.shape[0], -1]) # TODO: What to do with the batchsize? Set batchsize = 1? Can we vectorize the ODE-solving o
         # import pdb
         # pdb.set_trace()
-        out_ = self.core.apply(out, self.f_numpy, [p.shape for p in self.f_numpy.parameters()], self.rtol, self.atol, *self.f_numpy.parameters())  #input, f, shape_params, rtol=1e-7, atol=1e-9
+        out_ = self.core.apply(out, self.f_numpy, [p.shape for p in self.f_numpy.parameters()], shape, self.rtol, self.atol, *self.f_numpy.parameters())  #input, f, shape_params, rtol=1e-7, atol=1e-9
         #out = out_.y[:, -1] #np.reshape(out.y, [6, -1]) # there are six timesteps, I think this returns all of them
         #out = torch.tensor(out_, device=device, requires_grad=True, dtype=torch.float32)
         out = torch.reshape(out_, shape)
