@@ -2,7 +2,7 @@
 """
 Created on Wed Jul  5 21:36:31 2023
 
-@author: nick8
+@author: nick8, fhoerold
 """
 
 import os
@@ -21,12 +21,12 @@ from sklearn.metrics import accuracy_score
 
 from torch.utils.tensorboard import SummaryWriter
 
-MODEL_NAME = 'MLP'
+MODEL_NAME = 'ODEnet'
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 IMG_SIZE = 28
 BATCH_SIZE = 32
 SAVE_DIR = os.path.join('runs',MODEL_NAME)
-EPOCH = 200
+EPOCH = 50
 LR = 0.001
 SAMPLE_RATE = 5
 
@@ -45,7 +45,7 @@ def sample(model, testloader, epoch = None, save_dir = SAVE_DIR):
    if epoch is None:
       epoch = 0
    sample_img, label = next(iter(testloader))
-   pred = model(sample_img)
+   pred = model(sample_img.to(DEVICE))
    sample_dir = os.path.join(save_dir,"samples")
    
    if not os.path.exists(sample_dir):
@@ -87,15 +87,20 @@ def evaluate(model, data_loader):
     return accuracy_score(gts, preds)
 
 def revmodeback(out, start, end, loss_grad, model):
+   # Backward through fc, pool, reul, and norm1:
+   # out = 
+   
    s0 = [out, loss_grad, torch.zeros(64)]
-
+   
    # a(t) = dL/dz(t) is already given by loss_grad
-   dfdz = torch.autograd.grad(model.odefunc(z), z)
-   dfdtheta = torch.autograd.grad(model.odefunc(model.parameters()), model.parameters())
+   dfdz = torch.autograd.grad(model.ODEsolve(out, model.odefunc, 0, 6), out)
+   dfdtheta = torch.autograd.grad(model.odefunc(None, model.parameters()), model.parameters())
    
    
-   def aug_dynamics([z, a, _], t, params):
-      return [model.odefunc(z), -a.transpose() * dfdz, -a.transpose() * dfdtheta]
+   def aug_dynamics(s0):
+      z = s0[:out.size()]
+      a = s0[out.size():out.size()+loss_grad.size()]
+      return [model.odefunc(None, z), -a.transpose() * dfdz, -a.transpose() * dfdtheta]
 
    z, dLdx, dLdtheta = model.ODESolve(s0, aug_dynamics, end, start)
 
@@ -161,15 +166,34 @@ if __name__ == '__main__':
 
             ''' forward path '''
             output = model(imgs)
-
+            
             ''' compute loss, backpropagation, update parameters '''
             loss = criterion(output, cls)  # compute loss
 
-            #optimizer.zero_grad()  # set grad of all parameters to zero
-            #loss.backward()  # compute gradient for each parameters
-            #optimizer.step()  # update parameters
+            print(dir(loss.grad_fn))
+            print(loss.grad_fn._saved_weight)
+            print(output)
+            exit(0)
 
+            # optimizer.zero_grad()  # set grad of all parameters to zero
+            # loss.backward()  # compute gradient for each parameters
+            # optimizer.step()  # update parameters
+
+            # Compare backward gradient
+            optimizer.zero_grad()
+            loss.backward()
+            for param in model.parameters():
+               print("Parameter:", param.data.shape)
+               print("Gradient: ", param.grad)
+            for param in model.fc.parameters():
+               print(param.grad)
+            optimizer.zero_grad()
+
+            for _ in range(10):
+               print("###########"*10)
+            
             loss_grad = torch.autograd.grad(criterion(output, cls), output)
+            print(loss_grad)
             grads = revmodeback(output, 0, 6, loss_grad, model)
             model.grad = grads
             optimizer.step()  # Update parameters

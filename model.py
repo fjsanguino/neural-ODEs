@@ -1,9 +1,21 @@
 import torch.nn as nn
 import torch
 
-from scipy.integrate import ode
+#import scipy.integrate
 import sys
 
+# import autograd.numpy as np
+# from autograd.scipy.integrate import odeint
+# from autograd import jacobian
+# from autograd.builtins import tuple
+from torchdiffeq import odeint as odeint
+
+#from autograd_utils import odeint
+
+# import autograd.numpy as np
+# from autograd.extend import primitive
+# solve_ivp = primitive(scipy.integrate.solve_ivp)
+# odeint = primitive(scipy.integrate.odeint)
 
 class PaperModel(nn.Module):
 
@@ -13,13 +25,60 @@ class PaperModel(nn.Module):
         self.residual1 = Residual(64, 64, 2, nn.Conv2d(64, 64, kernel_size=1, stride=2, bias=False))
         self.residual2 = Residual(64, 64, 2, nn.Conv2d(64, 64, kernel_size=1, stride=2, bias=False))
 
-        #self.core = nn.Sequential(*[Residual(64, 64) for _ in range(6)])
-        self.odefunc = Residual(64, 64)
+        self.core = nn.Sequential(*[Residual(64, 64) for _ in range(6)])
 
         self.norm1 = nn.GroupNorm(min(32, 64), 64)
         self.relu = nn.ReLU(inplace=True)
         self.pool = nn.AdaptiveAvgPool2d((1,1))
         self.fc = nn.Linear(64, 10)
+
+    def forward(self, x):
+        out = self.residual2(self.residual1(self.conv1(x)))
+        out = self.core(out)
+        out = self.relu(self.norm1(out))
+        out = self.pool(out)
+        out = self.fc(torch.flatten(out, 1))
+
+        return out
+
+
+
+class odeint(Function):
+    @staticmethod
+    def forward(function, input, timeseries, method='RK45'):
+        return scipy.integrate.solve_ivp(function, timeseries, method=method)
+        
+    
+    
+class ODEFunc(nn.Module):
+    def __init__(self, odelayer):
+        super().__init__()
+        self.odelayer = odelayer
+
+    def forward(self, t, x):
+        return self.odelayer(x)
+        
+    
+class ODEnet(nn.Module):
+
+    def __init__(self):
+        super(ODEnet, self).__init__()
+        self.conv1 = nn.Conv2d(1, 64, 3, 1)
+        self.residual1 = Residual(64, 64, 2, nn.Conv2d(64, 64, kernel_size=1, stride=2, bias=False))
+        self.residual2 = Residual(64, 64, 2, nn.Conv2d(64, 64, kernel_size=1, stride=2, bias=False))
+
+        #self.core = nn.Sequential(*[Residual(64, 64) for _ in range(6)])
+        self.odelayer = Residual(64, 64)
+
+        self.odefunc = ODEFunc(self.odelayer)
+
+        self.norm1 = nn.GroupNorm(min(32, 64), 64)
+        self.relu = nn.ReLU(inplace=True)
+        self.pool = nn.AdaptiveAvgPool2d((1,1))
+        self.fc = nn.Linear(64, 10)
+        
+    # def odefunc (self, t, x):
+    #     return self.odelayer(x)
 
     def forward(self, x):
         out = self.residual2(self.residual1(self.conv1(x)))
@@ -34,14 +93,18 @@ class PaperModel(nn.Module):
         return out
 
     def ODEsolve(self, inp, func, start, end):
-        y0, t0 = inp, start
-        
-        r = ode(func).set_integrator('vode', method='adams')
-        r.set_initial_value(inp, start)
-        
-        return r.integrate(end)
+        #return solve_ivp(func, (start, end), inp, 'LSODA')
 
-    
+        timeseries = torch.tensor([start, end], dtype=torch.float64).to(inp.device)
+        
+        return odeint(func, inp, timeseries, method='implicit_adams')[1]
+
+        # r = ode(func).set_integrator('vode', method='adams')
+        # r.set_initial_value(inp, start)
+
+        # return r.integrate(end)
+
+
 class Residual(nn.Module):
     expansion = 1
 
@@ -86,12 +149,10 @@ def get_model(name, input_dim = 28*28, output_dim = 10):
         return MLP(input_dim,output_dim)
     elif name == 'Paper':
         return PaperModel()
+    elif name == 'ODEnet':
+        return ODEnet()
 
 
     else:
         print('No model with specified name \"' ,name , '\" exiting code...')
         sys.exit()
-
-
-
-    
