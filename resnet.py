@@ -22,7 +22,7 @@ from sklearn.metrics import accuracy_score
 from torch.utils.tensorboard import SummaryWriter
 
 MODEL_NAME = 'ODEnet'
-DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+DEVICE = "cpu" # "cuda" if torch.cuda.is_available() else "cpu"
 IMG_SIZE = 28
 BATCH_SIZE = 32
 SAVE_DIR = os.path.join('runs',MODEL_NAME)
@@ -170,33 +170,29 @@ if __name__ == '__main__':
             ''' compute loss, backpropagation, update parameters '''
             loss = criterion(output, cls)  # compute loss
 
-            print(dir(loss.grad_fn))
-            print(loss.grad_fn._saved_weight)
-            print(output)
-            exit(0)
-
-            # optimizer.zero_grad()  # set grad of all parameters to zero
-            # loss.backward()  # compute gradient for each parameters
-            # optimizer.step()  # update parameters
+            # Standard operation
+            optimizer.zero_grad()  # set grad of all parameters to zero
+            loss.backward()  # compute gradient for each parameters
+            optimizer.step()  # update parameters
 
             # Compare backward gradient
-            optimizer.zero_grad()
-            loss.backward()
-            for param in model.parameters():
-               print("Parameter:", param.data.shape)
-               print("Gradient: ", param.grad)
-            for param in model.fc.parameters():
-               print(param.grad)
-            optimizer.zero_grad()
+            # optimizer.zero_grad()
+            # loss.backward()
+            # for param in model.parameters():
+            #    print("Parameter:", param.data.shape)
+            #    print("Gradient: ", param.grad)
+            # for param in model.fc.parameters():
+            #    print(param.grad)
+            # optimizer.zero_grad()
 
-            for _ in range(10):
-               print("###########"*10)
+            # for _ in range(10):
+            #    print("###########"*10)
             
-            loss_grad = torch.autograd.grad(criterion(output, cls), output)
-            print(loss_grad)
-            grads = revmodeback(output, 0, 6, loss_grad, model)
-            model.grad = grads
-            optimizer.step()  # Update parameters
+            # loss_grad = torch.autograd.grad(criterion(output, cls), output)
+            # print(loss_grad)
+            # grads = revmodeback(output, 0, 6, loss_grad, model)
+            # model.grad = grads
+            # optimizer.step()  # Update parameters
 
             ''' write out information to tensorboard '''
             writer.add_scalar('loss', loss.data.cpu().numpy(), iters)
