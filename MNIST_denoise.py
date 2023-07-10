@@ -37,6 +37,8 @@ def correct_name(name = MODEL_NAME):
       return 'Paper2'
    elif name == 'MLP':
       return 'MLP2'
+   else:
+      return name
 MODEL_NAME = correct_name(MODEL_NAME)
 
 def seed_init_fn(x):
