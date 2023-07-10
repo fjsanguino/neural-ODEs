@@ -118,7 +118,7 @@ def evaluate(model, data_loader):
             accs.append(acc)
 
     
-    accs = np.array(torch.stack(accs))
+    accs = np.array(torch.stack(accs).detach().cpu())
 
     return np.mean(accs)
 
