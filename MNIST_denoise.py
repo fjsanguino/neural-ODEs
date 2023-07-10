@@ -32,6 +32,13 @@ EPOCH = 200
 LR = 0.001
 SAMPLE_RATE = 10
 
+def correct_name(name = MODEL_NAME):
+   if name == 'Paper':
+      return 'Paper2'
+   elif name == 'MLP':
+      return 'MLP2'
+MODEL_NAME = correct_name(MODEL_NAME)
+
 def seed_init_fn(x):
    #seed = args.seed + x
    seed = x
