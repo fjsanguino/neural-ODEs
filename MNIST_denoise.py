@@ -27,7 +27,7 @@ IMG_SIZE = 28
 num_classes = 10
 img_channels = 1
 BATCH_SIZE = 32
-SAVE_DIR = os.path.join('runs','denoising' ,MODEL_NAME, '_lr0001')
+SAVE_DIR = os.path.join('runs','denoising' ,MODEL_NAME + '_lr0001')
 EPOCH = 200
 LR = 0.001
 SAMPLE_RATE = 10
@@ -118,7 +118,7 @@ def evaluate(model, data_loader):
             accs.append(acc)
 
     
-    accs = np.array(accs)
+    accs = np.array(torch.stack(accs))
 
     return np.mean(accs)
 

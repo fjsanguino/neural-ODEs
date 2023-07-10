@@ -50,7 +50,7 @@ def sample(model, testloader, epoch = None, save_dir = SAVE_DIR):
    if epoch is None:
       epoch = 0
    sample_img, label = next(iter(testloader))
-   pred = model(sample_img)
+   pred = model(sample_img.to(DEVICE))
    sample_dir = os.path.join(save_dir,"samples")
    
    if not os.path.exists(sample_dir):
