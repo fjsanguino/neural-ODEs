@@ -59,7 +59,7 @@ def sample(model, testloader, epoch = None, save_dir = SAVE_DIR):
    
    noisy_img = add_noise(sample_img)
    
-   pred = model(noisy_img).detach().numpy()
+   pred = model(noisy_img.to(DEVICE)).detach().numpy()
    sample_dir = os.path.join(save_dir,"samples")
    
    if not os.path.exists(sample_dir):
