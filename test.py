@@ -79,7 +79,7 @@ if __name__ == '__main__':
     model = get_model(MODEL_NAME).to(device=DEVICE)
 
     ''' resume save model '''
-    checkpoint = torch.load(os.path.join(SAVE_DIR, 'model_best.pth.tar'))
+    checkpoint = torch.load(os.path.join(SAVE_DIR, 'model_best.pth.tar'), map_location=torch.device(DEVICE))
     model.load_state_dict(checkpoint)
 
     acc = evaluate(model, val_loader)
