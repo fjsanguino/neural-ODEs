@@ -35,15 +35,16 @@ class NonResidualFC(nn.Module):
 
     def __init__(self, input_dim, output_dim):
         super(NonResidualFC, self).__init__()
-        self.relu = nn.ReLU(inplace=True)
         self.fc1 = nn.Linear(input_dim * 2, 64)
-        self.fc2 = nn.Linear(64, 64)
+        self.fc2 = nn.Linear(64 + input_dim, 64)
         self.fc3 = nn.Linear(64, output_dim)
+        self.relu = nn.ReLU(inplace=True)
 
     def forward(self, t, x):
         t_ = torch.ones(x.shape, dtype=torch.float32, device=x.device) * t
         out = self.fc1(torch.cat([x, t_], dim=1))
         out = self.relu(out)
+        out = self.fc1(torch.cat([out, t_], dim=1))
         out = self.fc2(out)
         out = self.relu(out)
         out = self.fc3(out)
@@ -57,9 +58,9 @@ class NonResidual(nn.Module):
         super(NonResidual, self).__init__()
         self.norm1 = nn.GroupNorm(min(32, input_dim), input_dim)
         self.relu = nn.ReLU(inplace=True)
-        self.conv1 = nn.Conv2d(input_dim+1, output_dim, kernel_size=3, stride=stride, padding=1, bias=False)
+        self.conv1 = nn.Conv2d(input_dim+1, output_dim, kernel_size=3, stride=stride, padding=1, bias=True)
         self.norm2 = nn.GroupNorm(min(32, output_dim), output_dim)
-        self.conv2 = nn.Conv2d(output_dim, output_dim, kernel_size=3, padding=1, bias=False)
+        self.conv2 = nn.Conv2d(output_dim+1, output_dim, kernel_size=3, padding=1, bias=True)
         self.norm3 = nn.GroupNorm(min(32, output_dim), output_dim) # paper has another norm in the end
 
     def forward(self, t, x):
@@ -72,8 +73,9 @@ class NonResidual(nn.Module):
         output = self.conv1(output)
         output = self.norm2(output)
         output = self.relu(output)
+        output = torch.cat([output, t_], dim=1)
         output = self.conv2(output)
-        output = self.norm3(output) # added
+        output = self.norm3(output) # added -  Todo: Try with and without
         return output
 
 class NonResidualNumpyCompat(nn.Module):
@@ -156,12 +158,13 @@ class ODENetCore(autograd.Function):
                 if len(s0_shapes[1])>1:
                     a_t = a_t.reshape(s0_shapes[1])
                 with torch.enable_grad():
-                    z = z_t.detach()[None, ...]
+                    z = z_t.detach()
+                    z = torch.reshape(z, ctx.input_shape)
                     z.requires_grad_(True)
                     grad_f = []
-                    f_applied = ctx.f.non_res_block(t, torch.reshape(z, ctx.input_shape)) # ctx.f.non_res_block(t, z)
-                    # TODO: Use f.non_res_block and reshape z correctly before inputting it here.
-                    # TODO: Cannot use f, because we need tensors for autograd and f expects numpy arrays.
+                    f_applied = ctx.f.non_res_block(t, z) # ctx.f.non_res_block(t, z)
+                    # Use f.non_res_block and reshape z correctly before inputting it here.
+                    #  Cannot use f, because we need tensors for autograd and f expects numpy arrays.
                     for f_val in f_applied.flatten():
                         grad_f.append(torch.autograd.grad(f_val, [z, *ctx.f.parameters()] , allow_unused=True,
                                                           retain_graph=True )) #  retain_graph=True : They use that in their implementation, but not sure what it does. allow_unused=True: If we need that, we should get an error when setting it to False. Can try with False.

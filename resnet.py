@@ -107,6 +107,8 @@ if __name__ == '__main__':
 
     ''' setup optimizer '''
     optimizer = torch.optim.SGD(model.parameters(), lr=LR, momentum=0.9)
+    if MODEL == "odenet_manual":
+        optimizer = torch.optim.adam(model.parameters(), lr=LR)
 
     ''' setup tensorboard '''
     writer = SummaryWriter(os.path.join(SAVE_DIR, 'train_info'))

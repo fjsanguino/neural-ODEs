@@ -1,7 +1,8 @@
 import numpy as np
 import torch
 from torch.utils.data import DataLoader, TensorDataset
-
+import os, sys
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from model_odenet_manual import ODENetCore, NonResidualNumpyCompat
 
 
@@ -34,18 +35,27 @@ def test_odenet_core():
     epochs = 100
     rtol= 1e-7
     atol=1e-9
-    batch_size = 8
+    batch_size = 32
+    increase_batch_size_every = 1000#20
+    decrease_lr_every = 2
 
     f = NonResidualNumpyCompat(input_dim=2, output_dim=2, shape=[2,], conv=False)
     core = ODENetCore()
 
     optimizer = torch.optim.SGD(f.parameters(), lr=0.001, momentum=0.9)
+    optimizer = torch.optim.Adam(f.parameters(), lr=0.001)
+    # optimizer = torch.optim.RMSprop(f.parameters(), lr=0.001)
     train_data = TensorDataset(torch.tensor(Z0), torch.tensor(Y))
     eval_data = TensorDataset(torch.tensor(Z0_eval), torch.tensor(Y_eval))
 
     train_loader = DataLoader(train_data, batch_size=1, shuffle=True, drop_last=True)
     val_loader = DataLoader(eval_data, batch_size=1, shuffle=True, drop_last=True)
     for epoch in range(epochs):
+        if (epoch + 1) % increase_batch_size_every == 0:
+            batch_size *= 2
+        if (epoch + 1) % decrease_lr_every == 0:
+            optimizer.param_groups[0]["lr"] *= 0.1
+            print(f"Ep {epoch}; lr: {optimizer.param_groups[0]['lr']}")
         l_ct = 0
         l_sum = 0
         optimizer.zero_grad()
@@ -57,14 +67,35 @@ def test_odenet_core():
             if l_ct >= batch_size:
                 (loss / l_ct).backward()
                 optimizer.step()
-                for param in f.parameters():
-                    g = param.grad
-                    print(g)
-                print(f"Loss: {loss.cpu() / l_ct}")
+                # for param in f.parameters():
+                #     g = param.grad
+                #     print(g)
+                try:
+                    print(f"Loss: {loss.cpu() / l_ct}")
+                except ZeroDivisionError:
+                    print(f"Ep. {epoch}, index {idx}: loss-count was zero for some reason. Total loss sum: {loss.cpu()}; loss count: {l_ct}. Batchsize: {batch_size}")
                 optimizer.zero_grad()
                 loss = 0.
                 l_ct = 0
-        print(f"Ep {epoch}: Loss: {l_sum/l_ct}")
+                # if len(list(f.parameters())) not in [1,2]:
+                #     raise AssertionError("with simple=True the core network should have only one linear layer (plus bias maybe)")
+                # A_learned = list(f.parameters())[0]
+                # try:
+                #     b_learned = list(f.parameters())[1]
+                # except IndexError:
+                #     pass
+                # bla = torch.svd(A_learned)
+                # if epoch >= 1 and (idx  == 0):
+                #     import pdb
+                #     pdb.set_trace()
+        loss = loss if type(loss) == float else loss.cpu()
+        try:
+            print(f"\nEp {epoch}: Loss: {loss/ l_ct}\n")
+        except ZeroDivisionError:
+            print(
+                f"Ep. {epoch}, index {idx}: loss-count was zero for some reason. Total loss sum: {loss}; loss count: {l_ct}. Batchsize: {batch_size}")
+
+        # Check for proximity to true solution
 
 
 
