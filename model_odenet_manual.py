@@ -57,9 +57,9 @@ class NonResidual(nn.Module):
         super(NonResidual, self).__init__()
         self.norm1 = nn.GroupNorm(min(32, input_dim), input_dim)
         self.relu = nn.ReLU(inplace=True)
-        self.conv1 = nn.Conv2d(input_dim+1, output_dim, kernel_size=3, stride=stride, padding=1, bias=False)
+        self.conv1 = nn.Conv2d(input_dim+1, output_dim, kernel_size=3, stride=stride, padding=1, bias=True)
         self.norm2 = nn.GroupNorm(min(32, output_dim), output_dim)
-        self.conv2 = nn.Conv2d(output_dim, output_dim, kernel_size=3, padding=1, bias=False)
+        self.conv2 = nn.Conv2d(output_dim+1, output_dim, kernel_size=3, stride=stride, padding=1, bias=True)
         self.norm3 = nn.GroupNorm(min(32, output_dim), output_dim) # paper has another norm in the end
 
     def forward(self, t, x):
@@ -72,6 +72,7 @@ class NonResidual(nn.Module):
         output = self.conv1(output)
         output = self.norm2(output)
         output = self.relu(output)
+        output = torch.cat([output, t_], dim=1)
         output = self.conv2(output)
         output = self.norm3(output) # added
         return output
