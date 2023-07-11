@@ -21,25 +21,17 @@ from sklearn.metrics import accuracy_score
 
 from torch.utils.tensorboard import SummaryWriter
 
-MODEL_NAME = 'Paper2'
+MODEL_NAME = 'Paper_denoise'
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 IMG_SIZE = 28
 num_classes = 10
 img_channels = 1
 BATCH_SIZE = 32
-SAVE_DIR = os.path.join('runs','denoising' ,MODEL_NAME + '_lr0001')
+SAVE_DIR = os.path.join('runs','denoising', MODEL_NAME + '_lr0001')
 EPOCH = 200
 LR = 0.001
 SAMPLE_RATE = 10
 
-def correct_name(name = MODEL_NAME):
-   if name == 'Paper':
-      return 'Paper2'
-   elif name == 'MLP':
-      return 'MLP2'
-   else:
-      return name
-MODEL_NAME = correct_name(MODEL_NAME)
 
 def seed_init_fn(x):
    #seed = args.seed + x

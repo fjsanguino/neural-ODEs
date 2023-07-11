@@ -21,13 +21,13 @@ from sklearn.metrics import accuracy_score
 
 from torch.utils.tensorboard import SummaryWriter
 
-MODEL_NAME = 'MLP'
+MODEL_NAME = 'Paper'
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 IMG_SIZE = 32
 num_classes = 10
 img_channels = 3
 BATCH_SIZE = 32
-SAVE_DIR = os.path.join('runs','cifar10', MODEL_NAME, '_lr0001')
+SAVE_DIR = os.path.join('runs','cifar10', MODEL_NAME + '_lr0001')
 EPOCH = 200
 LR = 0.001
 SAMPLE_RATE = 10
