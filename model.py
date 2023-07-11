@@ -59,14 +59,14 @@ class ODEIntFunction(Function):
         ctx.save_for_backward(input, timeseries, output)
         ctx.function = function
         ctx.method = method
-    
+
     @staticmethod
     def backward(ctx, grad_output):
         input, timeseries, output = ctx.saved_tensors
         #grad_input = torch.autograd.grad(ctx.function(timeseries, input), input)
 
-        nz = ctx.function.parameters().shape
-        
+        nz = ctx.function(None, None, parameters = True)
+
         aug_state = [torch.zeros(nz), output, grad_output]
 
         def augmented_dynamics(t, aug_output):
@@ -83,7 +83,7 @@ class ODEIntFunction(Function):
 
             aug_state[nz:nz+output.size] = output[i-1]
             aug_state[nz+output.size:nz+output.size+grad_output.size] += grad_output[i-1]
-        
+
         return aug_state[nz:]
 
 def odeint(function, input, timeseries, method='RK45'):
@@ -97,20 +97,23 @@ class ResidualODE(nn.Module):
         super(ResidualODE, self).__init__()
         self.timestep = torch.tensor([0, timestep], dtype=torch.float)
         self.method = method
-        
+
         self.norm1 = nn.GroupNorm(input_dim, input_dim)
         self.relu = nn.ReLU(inplace=True)
         self.conv1 = nn.Conv2d(input_dim, output_dim, kernel_size=3, stride=1, padding=1, bias=False)
         self.norm2 = nn.GroupNorm(output_dim, output_dim)
         self.conv2 = nn.Conv2d(output_dim, output_dim, kernel_size=3, padding=1, bias=False)
 
-    def odefunc(self, t, x):
+    def odefunc(self, t, x, parameters=False):
+        if parameters:
+            return self.parameters()
+
         numpy = False
         if x.shape == (100352,):
             x = x.reshape((32, 64, 7, 7))
             x = torch.tensor(x, dtype=torch.float)
             numpy = True
-            
+
         output = self.relu(self.norm1(x))
 
         output = self.conv1(output)
@@ -124,12 +127,12 @@ class ResidualODE(nn.Module):
             return out.flatten().numpy()
         else:
             return out
-        
+
     def forward(self, x):
         return odeint(self.odefunc, x, self.timestep, method=self.method)
-    
-    
-    
+
+
+
 # class ODEFunc(nn.Module):
 #     def __init__(self, odelayer):
 #         super().__init__()
@@ -137,8 +140,8 @@ class ResidualODE(nn.Module):
 
 #     def forward(self, t, x):
 #         return self.odelayer(x)
-        
-    
+
+
 class ODEnet(nn.Module):
 
     def __init__(self):
@@ -157,7 +160,7 @@ class ODEnet(nn.Module):
         self.relu = nn.ReLU(inplace=True)
         self.pool = nn.AdaptiveAvgPool2d((1,1))
         self.fc = nn.Linear(64, 10)
-        
+
     # def odefunc (self, t, x):
     #     return self.odelayer(x)
 
@@ -167,7 +170,7 @@ class ODEnet(nn.Module):
         #out = self.core(out)
         #out = self.ODEsolve(out, self.odefunc, 0, 6)
         out = self.odelayer(out)
-        
+
         out = self.relu(self.norm1(out))
         out = self.pool(out)
         out = self.fc(torch.flatten(out, 1))
@@ -178,7 +181,7 @@ class ODEnet(nn.Module):
     #     #return solve_ivp(func, (start, end), inp, 'LSODA')
 
     #     timeseries = torch.tensor([start, end], dtype=torch.float64).to(inp.device)
-        
+
     #     #return odeint(func, inp, timeseries, method='implicit_adams')[1]
     #     return odeint(func, inp, timeseries, method='implicit_adams')
 
