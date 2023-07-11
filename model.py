@@ -100,9 +100,10 @@ class ResidualODE(nn.Module):
 
         self.norm1 = nn.GroupNorm(input_dim, input_dim)
         self.relu = nn.ReLU(inplace=True)
-        self.conv1 = nn.Conv2d(input_dim, output_dim, kernel_size=3, stride=1, padding=1, bias=False)
+        self.conv1 = nn.Conv2d(input_dim + 1, output_dim, kernel_size=3, stride=1, padding=1, bias=True)
         self.norm2 = nn.GroupNorm(output_dim, output_dim)
-        self.conv2 = nn.Conv2d(output_dim, output_dim, kernel_size=3, padding=1, bias=False)
+        self.conv2 = nn.Conv2d(output_dim + 1, output_dim, kernel_size=3, stride=1, padding=1, bias=True)
+        self.norm3 = nn.GroupNorm(output_dim, output_dim)
 
     def odefunc(self, t, x, parameters=False):
         if parameters:
@@ -116,19 +117,20 @@ class ResidualODE(nn.Module):
 
         output = self.relu(self.norm1(x))
 
-        output = self.conv1(output)
+        t = torch.ones_like(self.timestep[:,:1,:,:]) * t
+        output = self.conv1(torch.cat([t, output], 1))
         output = self.norm2(output)
         output = self.relu(output)
-        output = self.conv2(output)
-
-        out = output + x
+        output = self.conv2(torch.cat([t, output], 1))
+        output = self.norm3(output)
 
         if numpy:
-            return out.flatten().numpy()
+            return output.flatten().numpy()
         else:
-            return out
+            return output
 
     def forward(self, x):
+        odeint(self.odefunc, x, self.integration_time)
         return odeint(self.odefunc, x, self.timestep, method=self.method)
 
 
