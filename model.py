@@ -244,12 +244,11 @@ class ODENet(nn.Module):
 
         self.core = ODENetCore()
 
+        
         self.norm1 = nn.GroupNorm(min(32, 64), 64)
         self.relu = nn.ReLU(inplace=True)
         self.pool = nn.AdaptiveAvgPool2d((1,1))
         self.fc = nn.Linear(64, output_dim)
-
-        self.f_torch = NonResidual(input_dim=64, output_dim=64)
 
     def forward(self, x):
         out = self.residual2(self.residual1(self.conv1(x)))
@@ -260,6 +259,39 @@ class ODENet(nn.Module):
         out = self.relu(self.norm1(out))
         out = self.pool(out)
         out = self.fc(torch.flatten(out, 1))
+        return out
+
+
+
+class ODENet_denoise(nn.Module):
+    def __init__(self, in_channels = 1, output_dim = 10, rtol=1e-7, atol=1e-9):
+        super(ODENet_denoise, self).__init__()
+        self.rtol = rtol
+        self.atol = atol
+        self.conv1 = nn.Conv2d(in_channels, 64, 3, 1)
+        self.residual1 = Residual(64, 64, 2, nn.Conv2d(64, 64, kernel_size=1, stride=2, bias=False))
+        self.residual2 = Residual(64, 64, 2, nn.Conv2d(64, 64, kernel_size=1, stride=2, bias=False))
+
+        self.core = ODENetCore()
+        self.f_torch = NonResidual(input_dim=64, output_dim=64)
+        
+        self.norm1 = nn.GroupNorm(min(32, 64), 64)
+        self.relu = nn.ReLU(inplace=True)
+        self.pool = nn.AdaptiveAvgPool2d((1,1))
+        self.fc = nn.Linear(64, output_dim)
+        self.conv3 = nn.Conv2d(64, 16, 1, 1)
+
+    def forward(self, x):
+        out = self.residual2(self.residual1(self.conv1(x)))
+        t = torch.tensor([0, 1], dtype=torch.float)
+        
+        out = self.core.apply(out, t, self.f_torch, self.rtol, self.atol, *self.f_torch.parameters())
+
+        out = self.relu(self.norm1(out))
+        out = self.conv3(out)
+
+        out = out.reshape(32,1,28,28)
+        
         return out
 
 
@@ -277,6 +309,8 @@ def get_model(name, input_dim = 28, output_dim = 10, in_channels = 1, out_channe
         return MLP_denoise(input_dim, output_dim, in_channels)
     elif name == 'Paper_denoise':
         return PaperModel_denoise(in_channels, output_dim)
+    elif name == 'ODENet_denoise':
+        return ODENet_denoise(in_channels, output_dim)
 
 
     else:
