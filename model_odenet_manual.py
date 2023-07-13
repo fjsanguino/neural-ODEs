@@ -104,11 +104,12 @@ class ODENetCore(autograd.Function):
         with respect to the output, and we need to compute the gradient of the loss
         with respect to the input.
         """
+        #print(grad_output)
+        
         with torch.no_grad():
             t, output, *params = ctx.saved_tensors
 
-            s0 = [torch.scalar_tensor(0, dtype=torch.float32),
-                  output,
+            s0 = [output,
                   grad_output,
                   *[torch.zeros_like(param).flatten() for param in params]]            
             s0 = torch.cat([s0_.flatten() for s0_ in s0])
@@ -128,51 +129,22 @@ class ODENetCore(autograd.Function):
                     z_t = z_t.requires_grad_(True)
                     t = t.requires_grad_(True)
 
-                    # for f_val in f_applied.flatten():
-                    #     grad_f.append(torch.autograd.grad(f_val, [z_t, *ctx.f.parameters()] , allow_unused=True,
-                    #                                       retain_graph=True )) #  retain_graph=True : They use that in their implementation, but not sure what it does. allow_unused=True: If we need that, we should get an error when setting it to False. Can try with False.
+                    grad_z, *grad_params = torch.autograd.grad(ctx.f(t, z_t), [z_t, *params], -a_t, allow_unused=True, retain_graph=True)
 
-                    grad_z, grad_t, *grad_params = torch.autograd.grad(ctx.f(t, z_t), [z_t, t, *params], -a_t, allow_unused=True, retain_graph=True)
-
-                grad_f = [grad_t, grad_z, a_t, *grad_params]
+                grad_f = [grad_z, a_t, *grad_params]
                     
                 grad_f = torch.cat([grad_f_.flatten() for grad_f_ in grad_f])
 
                 return grad_f
 
-                #df_dz = torch.stack([grad_f[i][0].flatten() for i in range(len(grad_f))], dim=0) # each row is for one element of f.
-                # df_dtheta = []
-                # for j in range(1,len(grad_f[0])):
-                #     df_dtheta.append(torch.stack([grad_f[i][j].flatten() for i in range(len(grad_f))], dim=0) )# each row is for one element of f.
-                #df_dtheta = grad_f
-
-                # return torch.cat((ctx.f(t, z_t), -torch.einsum("i,ij->j", a_t, df_dz), -torch.einsum("i,ij->j", a_t, df_dtheta)))
-
-                # return np.concatenate([ctx.f(t, z_t).flatten(), # unnecessary additional function call?
-                #                        -torch.einsum("i,ij->j", a_t, df_dz).detach().cpu().numpy().flatten(),
-                #         *[-torch.einsum("i,ij->j", a_t, df_dth_).detach().cpu().numpy().flatten() for df_dth_ in df_dtheta] ])
-
-            #solution = tdeq.AdamsBashforthMoulton(lambda t, s: augmented_dynamics(t, s, output.device), t, s0)
             solution = tdeq._impl.fixed_adams.AdamsBashforthMoulton(augmented_dynamics, y0=s0, perturb=False, rtol=ctx.rtol, atol=ctx.atol).integrate(t.flip(0))[1]
 
-        #     sol_elems = []
-        #     start_idx = 0
-        #     for i, (shp, sz) in enumerate(zip(s0_shapes, s0_sizes)):
-        #         elem = solution[start_idx : start_idx + sz]
-        #         start_idx = start_idx + sz
-        #         elem = torch.tensor(elem, dtype=torch.float32, device=output.device, requires_grad=False)
-        #         if len(shp) > 1:
-        #             elem = elem.reshape(shp)
-        #         sol_elems.append(-elem) # by trial and error, this has to be negative for the loss to decrease.
-        # # TODO: It is unclear whether the first element, sol_elems[1], has to be negative as well.
-        # return sol_elems[1], None, None, None, None, None, *sol_elems[2:],   # Grad df/dtheta is solution[2]
 
-        dfdt = solution
-        dfdz = solution[1:os+1].reshape(output.shape)
-
+            
+        dfdz = solution[:os].reshape(output.shape)
         
         dfdtheta = []
-        start_idx = os+gos+1
+        start_idx = os+gos
         for param in params:
             size = param.flatten().shape[0]
             shape = param.shape
@@ -180,8 +152,10 @@ class ODENetCore(autograd.Function):
 
             dfdtheta.append(solution[start_idx:stop_idx].reshape(shape))
             start_idx = stop_idx
+
+        #print("Our dfdz:  ", dfdz[0, 0])
         
-        return dfdz, dfdt, None, None, None, *dfdtheta
+        return dfdz, None, None, None, None, *dfdtheta
 
 
 class ODENetManual(nn.Module):
@@ -210,20 +184,25 @@ class ODENetManual(nn.Module):
 
         #out = self.core.apply(out, self.f_torch, [p.shape for p in self.f_torch.parameters()], shape, self.rtol, self.atol, *self.f_torch.parameters())
         t = torch.tensor([0, 5], dtype=torch.float)
-
+        
         # Our implementation
         test_out = self.core.apply(out, t, self.f_torch, self.rtol, self.atol, *self.f_torch.parameters())
-
-        #test_out.backward()
-        # exit(0)
+        
+        test_loss = torch.nn.functional.l1_loss(test_out, torch.zeros_like(test_out))
+        test_loss.backward()
         
         # Paper implementation
         shapes, func, y0, t, rtol, atol, method, options, event_fn, decreasing_time = tdeq._impl.misc._check_inputs(self.f_torch, out, t, self.rtol, self.atol, 'implicit_adams', None, None, {'implicit_adams': tdeq._impl.fixed_adams.AdamsBashforthMoulton})
         out = self.tdeq_core.apply(shapes, func, y0, t, rtol, atol, method, options, event_fn,
                                    rtol, atol, method, None, t.requires_grad, *func.parameters())[1]
+        
+        loss = torch.nn.functional.l1_loss(out, torch.zeros_like(out))
+        loss.backward()
+        exit(0)
+        
         assert(torch.allclose(test_out, out))
 
-        out = self.relu(self.norm1(out))
+        out = self.relu(self.norm1(test_out))
         out = self.pool(out)
         out = self.fc(torch.flatten(out, 1))
         return out
