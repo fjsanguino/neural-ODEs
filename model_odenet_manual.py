@@ -78,7 +78,7 @@ class NonResidual(nn.Module):
 
 class ODENetCore(autograd.Function):
     @staticmethod
-    def forward(ctx, input, f, rtol=1e-2, atol=1e-1):
+    def forward(ctx, input, t, f, rtol=1e-2, atol=1e-1, *params):
         """
         In the forward pass we receive a Tensor containing the input and return
         a Tensor containing the output. ctx is a context object that can be used
@@ -86,7 +86,6 @@ class ODENetCore(autograd.Function):
         objects for use in the backward pass using the ctx.save_for_backward method.
         """
 
-        t = torch.tensor([0, 5], dtype=torch.float)
         with torch.no_grad():
             output = tdeq._impl.fixed_adams.AdamsBashforthMoulton(f, y0=input, perturb=False, rtol=rtol, atol=atol).integrate(t)[1]
 
@@ -94,7 +93,7 @@ class ODENetCore(autograd.Function):
         ctx.rtol = rtol
         ctx.atol = atol
 
-        ctx.save_for_backward(t, output, *f.parameters())
+        ctx.save_for_backward(t, output, *params)
 
         return output
 
@@ -108,11 +107,12 @@ class ODENetCore(autograd.Function):
         with torch.no_grad():
             t, output, *params = ctx.saved_tensors
 
-            #zeros = torch.cat([torch.zeros_like(param) for param in ctx.f.parameters()])
-            s0 = [output, grad_output, *[torch.zeros_like(param).flatten() for param in params]]
+            s0 = [torch.scalar_tensor(0, dtype=torch.float32),
+                  output,
+                  grad_output,
+                  *[torch.zeros_like(param).flatten() for param in params]]            
             s0 = torch.cat([s0_.flatten() for s0_ in s0])
-
-            # REALLY PYTORCH??? REALLY??
+            
             os = output.flatten().shape[0]
             gos = grad_output.flatten().shape[0]
 
@@ -122,7 +122,7 @@ class ODENetCore(autograd.Function):
                 z_t = cur_state[:os].reshape(output.shape)
                 a_t = cur_state[os:os+gos].reshape(grad_output.shape)
 
-                t = torch.scalar_tensor(t, requires_grad=False, dtype=torch.float32)
+                #t = torch.scalar_tensor(t, requires_grad=False, dtype=torch.float32)
 
                 with torch.enable_grad():
                     z_t = z_t.requires_grad_(True)
@@ -132,9 +132,9 @@ class ODENetCore(autograd.Function):
                     #     grad_f.append(torch.autograd.grad(f_val, [z_t, *ctx.f.parameters()] , allow_unused=True,
                     #                                       retain_graph=True )) #  retain_graph=True : They use that in their implementation, but not sure what it does. allow_unused=True: If we need that, we should get an error when setting it to False. Can try with False.
 
-                    grad_z, *grad_params = torch.autograd.grad(ctx.f(t, z_t), [z_t, *params], -a_t, allow_unused=True, retain_graph=True)
+                    grad_z, grad_t, *grad_params = torch.autograd.grad(ctx.f(t, z_t), [z_t, t, *params], -a_t, allow_unused=True, retain_graph=True)
 
-                grad_f = [grad_z, a_t, *grad_params]
+                grad_f = [grad_t, grad_z, a_t, *grad_params]
                     
                 grad_f = torch.cat([grad_f_.flatten() for grad_f_ in grad_f])
 
@@ -167,7 +167,21 @@ class ODENetCore(autograd.Function):
         # # TODO: It is unclear whether the first element, sol_elems[1], has to be negative as well.
         # return sol_elems[1], None, None, None, None, None, *sol_elems[2:],   # Grad df/dtheta is solution[2]
 
-        return solution[:os].reshape(output.shape), None, None, None
+        dfdt = solution
+        dfdz = solution[1:os+1].reshape(output.shape)
+
+        
+        dfdtheta = []
+        start_idx = os+gos+1
+        for param in params:
+            size = param.flatten().shape[0]
+            shape = param.shape
+            stop_idx = start_idx + size
+
+            dfdtheta.append(solution[start_idx:stop_idx].reshape(shape))
+            start_idx = stop_idx
+        
+        return dfdz, dfdt, None, None, None, *dfdtheta
 
 
 class ODENetManual(nn.Module):
@@ -181,6 +195,7 @@ class ODENetManual(nn.Module):
         self.residual2 = Residual(64, 64, 2, nn.Conv2d(64, 64, kernel_size=1, stride=2, bias=False))
 
         self.core = ODENetCore()
+        self.tdeq_core = tdeq._impl.adjoint.OdeintAdjointMethod()
 
         self.norm1 = nn.GroupNorm(min(32, 64), 64)
         self.relu = nn.ReLU(inplace=True)
@@ -194,7 +209,19 @@ class ODENetManual(nn.Module):
         out = self.residual2(self.residual1(self.conv1(x)))
 
         #out = self.core.apply(out, self.f_torch, [p.shape for p in self.f_torch.parameters()], shape, self.rtol, self.atol, *self.f_torch.parameters())
-        out = self.core.apply(out, self.f_torch, self.rtol, self.atol)
+        t = torch.tensor([0, 5], dtype=torch.float)
+
+        # Our implementation
+        test_out = self.core.apply(out, t, self.f_torch, self.rtol, self.atol, *self.f_torch.parameters())
+
+        #test_out.backward()
+        # exit(0)
+        
+        # Paper implementation
+        shapes, func, y0, t, rtol, atol, method, options, event_fn, decreasing_time = tdeq._impl.misc._check_inputs(self.f_torch, out, t, self.rtol, self.atol, 'implicit_adams', None, None, {'implicit_adams': tdeq._impl.fixed_adams.AdamsBashforthMoulton})
+        out = self.tdeq_core.apply(shapes, func, y0, t, rtol, atol, method, options, event_fn,
+                                   rtol, atol, method, None, t.requires_grad, *func.parameters())[1]
+        assert(torch.allclose(test_out, out))
 
         out = self.relu(self.norm1(out))
         out = self.pool(out)
