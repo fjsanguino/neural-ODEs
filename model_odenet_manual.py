@@ -104,7 +104,6 @@ class ODENetCore(autograd.Function):
         with respect to the output, and we need to compute the gradient of the loss
         with respect to the input.
         """
-        
         with torch.no_grad():
             t, output, *params = ctx.saved_tensors
  
@@ -176,7 +175,7 @@ class ODENetManual(nn.Module):
         device = x.device
         out = self.residual2(self.residual1(self.conv1(x)))
 
-        t = torch.tensor([0, 5], dtype=torch.float)
+        t = torch.tensor([0, 1], dtype=torch.float)
         
         out = self.core.apply(out, t, self.f_torch, self.rtol, self.atol, *self.f_torch.parameters())
 
