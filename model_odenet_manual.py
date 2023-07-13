@@ -104,11 +104,14 @@ class ODENetCore(autograd.Function):
         with respect to the output, and we need to compute the gradient of the loss
         with respect to the input.
         """
-        #print(grad_output)
+        #print("Ours:", grad_output)
         
         with torch.no_grad():
             t, output, *params = ctx.saved_tensors
 
+            # output = output[1]
+            # grad_output = grad_output[0][1]
+            
             s0 = [output,
                   grad_output,
                   *[torch.zeros_like(param).flatten() for param in params]]            
@@ -121,39 +124,44 @@ class ODENetCore(autograd.Function):
                 assert(perturb == tdeq._impl.misc.Perturb.NONE)
 
                 z_t = cur_state[:os].reshape(output.shape)
+                # print("t:", t)
+                # print("z_t:", z_t[0, 0])
                 a_t = cur_state[os:os+gos].reshape(grad_output.shape)
-
-                #t = torch.scalar_tensor(t, requires_grad=False, dtype=torch.float32)
 
                 with torch.enable_grad():
                     z_t = z_t.requires_grad_(True)
                     t = t.requires_grad_(True)
 
-                    grad_z, *grad_params = torch.autograd.grad(ctx.f(t, z_t), [z_t, *params], -a_t, allow_unused=True, retain_graph=True)
+                    ftz = ctx.f(t, z_t)
+                    
+                    grad_z, *grad_params = torch.autograd.grad(ftz, [z_t, *params], -a_t, allow_unused=True, retain_graph=True)
 
-                grad_f = [grad_z, a_t, *grad_params]
+                grad_f = [ftz, grad_z, *grad_params]
                     
                 grad_f = torch.cat([grad_f_.flatten() for grad_f_ in grad_f])
 
+                #print("grad_z:", grad_z[0, 0])
                 return grad_f
 
             solution = tdeq._impl.fixed_adams.AdamsBashforthMoulton(augmented_dynamics, y0=s0, perturb=False, rtol=ctx.rtol, atol=ctx.atol).integrate(t.flip(0))[1]
 
 
             
-        dfdz = solution[:os].reshape(output.shape)
+            dfdz = solution[os:os+gos].reshape(output.shape)
         
-        dfdtheta = []
-        start_idx = os+gos
-        for param in params:
-            size = param.flatten().shape[0]
-            shape = param.shape
-            stop_idx = start_idx + size
-
-            dfdtheta.append(solution[start_idx:stop_idx].reshape(shape))
-            start_idx = stop_idx
-
-        #print("Our dfdz:  ", dfdz[0, 0])
+            dfdtheta = []
+            start_idx = os+gos
+            for param in params:
+                size = param.flatten().shape[0]
+                shape = param.shape
+                stop_idx = start_idx + size
+                
+                dfdtheta.append(solution[start_idx:stop_idx].reshape(shape))
+                start_idx = stop_idx
+                
+            # print("Our dfdz:  ", dfdz[0, 0])
+            # for _ in range(10):
+            #     print()
         
         return dfdz, None, None, None, None, *dfdtheta
 
@@ -169,7 +177,7 @@ class ODENetManual(nn.Module):
         self.residual2 = Residual(64, 64, 2, nn.Conv2d(64, 64, kernel_size=1, stride=2, bias=False))
 
         self.core = ODENetCore()
-        self.tdeq_core = tdeq._impl.adjoint.OdeintAdjointMethod()
+        # self.tdeq_core = tdeq._impl.adjoint.OdeintAdjointMethod()
 
         self.norm1 = nn.GroupNorm(min(32, 64), 64)
         self.relu = nn.ReLU(inplace=True)
@@ -188,19 +196,19 @@ class ODENetManual(nn.Module):
         # Our implementation
         test_out = self.core.apply(out, t, self.f_torch, self.rtol, self.atol, *self.f_torch.parameters())
         
-        test_loss = torch.nn.functional.l1_loss(test_out, torch.zeros_like(test_out))
-        test_loss.backward()
+        # test_loss = torch.nn.functional.l1_loss(test_out, torch.zeros_like(test_out))
+        # test_loss.backward()
         
         # Paper implementation
-        shapes, func, y0, t, rtol, atol, method, options, event_fn, decreasing_time = tdeq._impl.misc._check_inputs(self.f_torch, out, t, self.rtol, self.atol, 'implicit_adams', None, None, {'implicit_adams': tdeq._impl.fixed_adams.AdamsBashforthMoulton})
-        out = self.tdeq_core.apply(shapes, func, y0, t, rtol, atol, method, options, event_fn,
-                                   rtol, atol, method, None, t.requires_grad, *func.parameters())[1]
+        # shapes, func, y0, t, rtol, atol, method, options, event_fn, decreasing_time = tdeq._impl.misc._check_inputs(self.f_torch, out, t, self.rtol, self.atol, 'implicit_adams', None, None, {'implicit_adams': tdeq._impl.fixed_adams.AdamsBashforthMoulton})
+        # out = self.tdeq_core.apply(shapes, func, y0, t, rtol, atol, method, options, event_fn,
+        #                            rtol, atol, method, None, t.requires_grad, *func.parameters())[1]
         
-        loss = torch.nn.functional.l1_loss(out, torch.zeros_like(out))
-        loss.backward()
-        exit(0)
+        # loss = torch.nn.functional.l1_loss(out, torch.zeros_like(out))
+        # loss.backward()
+        # exit(0)
         
-        assert(torch.allclose(test_out, out))
+        # assert(torch.allclose(test_out, out))
 
         out = self.relu(self.norm1(test_out))
         out = self.pool(out)
