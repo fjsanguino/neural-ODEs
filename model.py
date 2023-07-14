@@ -301,13 +301,13 @@ class ODENet_denoise(nn.Module):
 def get_model(name, input_dim = 28, output_dim = 10, in_channels = 1, out_channels = 1):
     if name == 'MLP':
         return MLP(input_dim,output_dim, in_channels)
-    elif name == 'Paper':
+    elif name == 'ResNet':
         return ResNet(in_channels, output_dim)
     elif name == 'ODENet':
         return ODENet(in_channels, output_dim)
     elif name == 'MLP_denoise':
         return MLP_denoise(input_dim, output_dim, in_channels)
-    elif name == 'Paper_denoise':
+    elif name == 'ResNet_denoise':
         return ResNet_denoise(in_channels, output_dim)
     elif name == 'ODENet_denoise':
         return ODENet_denoise(in_channels, output_dim)
