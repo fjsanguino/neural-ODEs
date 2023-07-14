@@ -7,4 +7,4 @@ We reproduce the results of Neural Ordinary Differential Equations (Ricky T.Q. C
 * `cifar10.py` runs the CIFAR task.
 * `MNIST_denoise.py` runs the Image Denoising task.
 
-Each task contains a variable `MODEL` which can be set to MLP, Paper, or ODENet to train the MLP, ResNet, or ODENet models, respectively.
+Each task contains a variable `MODEL` which can be set to MLP, ResNet, or ODENet to train the respective model.

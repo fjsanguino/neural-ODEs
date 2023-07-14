@@ -6,10 +6,10 @@ import sys
 # Note that we ONLY use the ported ODE solver, we implement the adjoint and backprop ourselves.
 import torchdiffeq as tdeq
 
-class PaperModel(nn.Module):
+class ResNet(nn.Module):
 
     def __init__(self, in_channels = 1, output_dim = 10):
-        super(PaperModel, self).__init__()
+        super(ResNet, self).__init__()
         self.conv1 = nn.Conv2d(in_channels, 64, 3, 1)
         self.residual1 = Residual(64, 64, 2, nn.Conv2d(64, 64, kernel_size=1, stride=2, bias=False))
         self.residual2 = Residual(64, 64, 2, nn.Conv2d(64, 64, kernel_size=1, stride=2, bias=False))
@@ -31,10 +31,10 @@ class PaperModel(nn.Module):
         return out
     
     
-class PaperModel_denoise(nn.Module):
+class ResNet_denoise(nn.Module):
 
     def __init__(self, in_channels = 1, output_dim = 10):
-        super(PaperModel_denoise, self).__init__()
+        super(ResNet_denoise, self).__init__()
         self.conv1 = nn.Conv2d(in_channels, 64, 3, 1)
         self.residual1 = Residual(64, 64, 2, nn.Conv2d(64, 64, kernel_size=1, stride=2, bias=False))
         self.residual2 = Residual(64, 64, 2, nn.Conv2d(64, 64, kernel_size=1, stride=2, bias=False))
@@ -302,13 +302,13 @@ def get_model(name, input_dim = 28, output_dim = 10, in_channels = 1, out_channe
     if name == 'MLP':
         return MLP(input_dim,output_dim, in_channels)
     elif name == 'Paper':
-        return PaperModel(in_channels, output_dim)
+        return ResNet(in_channels, output_dim)
     elif name == 'ODENet':
         return ODENet(in_channels, output_dim)
     elif name == 'MLP_denoise':
         return MLP_denoise(input_dim, output_dim, in_channels)
     elif name == 'Paper_denoise':
-        return PaperModel_denoise(in_channels, output_dim)
+        return ResNet_denoise(in_channels, output_dim)
     elif name == 'ODENet_denoise':
         return ODENet_denoise(in_channels, output_dim)
 
