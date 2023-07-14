@@ -13,7 +13,7 @@ from sklearn.metrics import accuracy_score
 
 from torch.utils.tensorboard import SummaryWriter
 
-MODEL = "Paper"
+MODEL = "Paper" # MLP, Paper, ODENet
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 IMG_SIZE = 28
 num_classes = 10

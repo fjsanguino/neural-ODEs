@@ -21,7 +21,7 @@ from sklearn.metrics import accuracy_score
 
 from torch.utils.tensorboard import SummaryWriter
 
-MODEL_NAME = 'MLP_denoise'
+MODEL_NAME = 'Paper_denoise' # MLP_denoise, Paper_denoise, ODENet_denoise
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 IMG_SIZE = 28
 num_classes = 10
