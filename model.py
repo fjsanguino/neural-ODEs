@@ -243,7 +243,7 @@ class ODENet(nn.Module):
         self.residual2 = Residual(64, 64, 2, nn.Conv2d(64, 64, kernel_size=1, stride=2, bias=False))
 
         self.core = ODENetCore()
-
+        self.f_torch = NonResidual(input_dim=64, output_dim=64)
         
         self.norm1 = nn.GroupNorm(min(32, 64), 64)
         self.relu = nn.ReLU(inplace=True)
