@@ -1,7 +1,7 @@
 import os
 import torch
 
-import model
+from model import get_model
 from numpy import random
 
 import numpy as np
@@ -16,18 +16,20 @@ from torch.utils.tensorboard import SummaryWriter
 MODEL = "Paper"
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 IMG_SIZE = 28
+num_classes = 10
+img_channels = 1
 BATCH_SIZE = 32
 SAVE_DIR = os.path.join('runs', MODEL)
 EPOCH = 200
 LR = 0.001
 DEBUG = True # reduce accuracy of ODENet to speed up training
 def seed_init_fn(x):
-   #seed = args.seed + x
-   seed = x
-   np.random.seed(seed)
-   random.seed(seed)
-   torch.manual_seed(seed)
-   return
+    # seed = args.seed + x
+    seed = x
+    np.random.seed(seed)
+    random.seed(seed)
+    torch.manual_seed(seed)
+    return
 
 def save_model(model, save_path):
     torch.save(model.state_dict(), save_path)
@@ -69,6 +71,7 @@ if __name__ == '__main__':
     seed_init_fn(0)
 
     ''' load dataset and prepare data loader '''
+    print('===> prepare dataloader ...')
     """Instantiate dataloaders of training and test datasets"""
     transform = [transforms.Resize(IMG_SIZE),
                  transforms.CenterCrop(IMG_SIZE), transforms.ToTensor()]
@@ -81,17 +84,20 @@ if __name__ == '__main__':
     train_loader = DataLoader(training_data, batch_size=BATCH_SIZE, shuffle=True, drop_last=True)
     val_loader = DataLoader(test_data, batch_size=BATCH_SIZE, shuffle=True, drop_last=True)
 
+    # ''' load model '''
+    # if MODEL == "resnet":
+    #     model = model.PaperModel()
+    # elif MODEL == "odenet_manual":
+    #     if DEBUG:
+    #         rtol, atol = 1e-4, 1e-6
+    #     else:
+    #         rtol, atol = 1e-7, 1e-9
+    #     model = model_odenet_manual.ODENetManual(device=DEVICE, rtol=rtol, atol=atol)
+    # else:
+    #     raise ValueError(f"Model not supported: {MODEL}")
     ''' load model '''
-    if MODEL == "resnet":
-        model = model.PaperModel()
-    elif MODEL == "odenet_manual":
-        if DEBUG:
-            rtol, atol = 1e-4, 1e-6
-        else:
-            rtol, atol = 1e-7, 1e-9
-        model = model_odenet_manual.ODENetManual(device=DEVICE, rtol=rtol, atol=atol)
-    else:
-        raise ValueError(f"Model not supported: {MODEL}")
+    print('===> prepare model ...')
+    model = get_model(MODEL, input_dim = IMG_SIZE, output_dim = num_classes, in_channels = img_channels)
     model.to(DEVICE)  # load model to gpu
 
     ''' define loss '''
@@ -104,6 +110,7 @@ if __name__ == '__main__':
     writer = SummaryWriter(os.path.join(SAVE_DIR, 'train_info'))
 
     ''' train model '''
+    print('==> start training ...')
     iters = 0
     best_acc = 0
     for epoch in range(1, EPOCH + 1):
@@ -143,8 +150,5 @@ if __name__ == '__main__':
             if acc > best_acc:
                 save_model(model, os.path.join(SAVE_DIR, 'model_best.pth.tar'))
                 best_acc = acc
-
-        ''' save model '''
-        #save_model(model, os.path.join(SAVE_DIR, 'model_{}.pth.tar'.format(epoch)))
 
     print('Best acc is {}'.format(best_acc))
