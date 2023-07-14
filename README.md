@@ -8,3 +8,6 @@ We reproduce the results of Neural Ordinary Differential Equations (Ricky T.Q. C
 * `MNIST_denoise.py` runs the Image Denoising task.
 
 Each task contains a variable `MODEL` which can be set to MLP, ResNet, or ODENet to train the respective model.
+
+## Trained Models
+Trained models and results can be found in the finished-runs directory. Results can be viewed using tensorboard: Simply run `tensorboard --logdir finished-runs`.
