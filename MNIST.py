@@ -99,6 +99,9 @@ if __name__ == '__main__':
     print('===> prepare model ...')
     model = get_model(MODEL, input_dim = IMG_SIZE, output_dim = num_classes, in_channels = img_channels)
     model.to(DEVICE)  # load model to gpu
+    pytorch_total_params = sum(p.numel() for p in model.parameters())
+    print(f'Number of parameters of model {MODEL}, on MNIST: {pytorch_total_params}')
+
 
     ''' define loss '''
     criterion = nn.CrossEntropyLoss()

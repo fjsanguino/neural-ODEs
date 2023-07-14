@@ -151,6 +151,9 @@ if __name__ == '__main__':
     
     model.to(DEVICE)  # load model to gpu
 
+    pytorch_total_params = sum(p.numel() for p in model.parameters())
+    print(f'Number of parameters of model {MODEL_NAME}, on MINST denoising: {pytorch_total_params}')
+
     ''' define loss '''
     criterion = nn.MSELoss()
 
